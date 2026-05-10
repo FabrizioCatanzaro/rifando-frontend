@@ -78,6 +78,9 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
 
   const { data: rafflesData, isLoading: rafflesLoading } = useMyRaffles();
   const raffle = rafflesData?.raffles.find((r) => r.id === id);
+  useEffect(() => {
+    if (raffle) document.title = `Rifando — ${raffle.title}`;
+  }, [raffle]);
 
   const { data: numbersData, isLoading: numbersLoading } = useNumbers(id);
   const { data: prizesData, isLoading: prizesLoading } = usePrizes(id);

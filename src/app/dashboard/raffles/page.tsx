@@ -1,4 +1,5 @@
 'use client';
+import { useEffect } from 'react';
 import { useMyRaffles, useDeleteRaffle } from '@/hooks/useRaffle';
 import { useAuthStore } from '@/stores/authStore';
 import { RaffleCard } from '@/components/raffle/RaffleCard';
@@ -8,6 +9,7 @@ import { LinkButton } from '@/components/ui/link-button';
 import { toast } from 'sonner';
 
 export default function RafflesPage() {
+  useEffect(() => { document.title = 'Rifando — Mis rifas'; }, []);
   const user = useAuthStore((s) => s.user);
   const { data, isLoading } = useMyRaffles();
   const deleteRaffle = useDeleteRaffle();

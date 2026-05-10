@@ -1,4 +1,5 @@
 'use client';
+import { useEffect } from 'react';
 import { useMyRaffles, useDeleteRaffle } from '@/hooks/useRaffle';
 import { useAuthStore } from '@/stores/authStore';
 import { RaffleCard } from '@/components/raffle/RaffleCard';
@@ -9,6 +10,7 @@ import { formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function DashboardPage() {
+  useEffect(() => { document.title = 'Rifando — Dashboard'; }, []);
   const user = useAuthStore((s) => s.user);
   const { data, isLoading } = useMyRaffles();
   const deleteRaffle = useDeleteRaffle();

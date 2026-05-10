@@ -4,7 +4,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -103,6 +103,7 @@ const ICONS = ['🔒', '❌', '🎟️', '🏆', '💜', '✅', '🌟'];
 // ─── component ─────────────────────────────────────────────────────────────
 
 export default function NewRafflePage() {
+  useEffect(() => { document.title = 'Rifando — Nueva rifa'; }, []);
   const router = useRouter();
   const createRaffle = useCreateRaffle();
   const [copiedCode, setCopiedCode] = useState(false);
