@@ -141,7 +141,8 @@ export function RaffleCard({ raffle, username, onDelete }: RaffleCardProps) {
       );
 
       const { RafflePDFDocument } = await import('./RafflePDF');
-      const doc = createElement(RafflePDFDocument, { raffle, prizes, qrDataUrl, username });
+      const logoUrl = `${window.location.origin}/logo-full.png`;
+      const doc = createElement(RafflePDFDocument, { raffle, prizes, qrDataUrl, logoUrl, username });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const blob = await pdf(doc as any).toBlob();
 

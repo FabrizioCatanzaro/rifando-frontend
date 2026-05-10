@@ -51,7 +51,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar desktop */}
       <aside className="hidden md:flex flex-col w-60 border-r border-zinc-800 bg-zinc-950 p-4 gap-1">
         <div className="mb-6 px-2">
-          <Link href="/" className="text-xl font-bold text-violet-400">🎟️ Rifando</Link>
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/logo-mark.png" alt="" className="h-8 w-8" aria-hidden />
+            <img src="/logo-text.png" alt="Rifando" className="h-5 w-auto" />
+          </Link>
         </div>
 
         {NAV.map(({ href, label, icon: Icon }) => (
@@ -87,26 +90,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex flex-col flex-1 min-w-0">
         {/* Mobile header */}
         <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-          <Link href="/" className="text-lg font-bold text-violet-400">🎟️ Rifando</Link>
+          <Link href="/" className="flex items-center gap-1.5">
+            <img src="/logo-mark.png" alt="" className="h-7 w-7" aria-hidden />
+            <img src="/logo-text.png" alt="Rifando" className="h-4 w-auto" />
+          </Link>
           <Button variant="ghost" size="sm" onClick={handleLogout}>
             <LogOut className="h-4 w-4" />
           </Button>
         </header>
 
-        <main className="flex-1 p-4 md:p-8">{children}</main>
+        <main className="flex-1 p-4 pb-20 md:pb-8 md:p-8">{children}</main>
 
-        {/* Mobile nav */}
-        <nav className="md:hidden flex border-t border-zinc-800 bg-zinc-950">
+        {/* Mobile nav — fixed at bottom, always visible */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm">
           {NAV.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               className={cn(
-                'flex flex-col items-center gap-1 flex-1 py-3 text-xs transition-colors',
+                'flex flex-col items-center gap-0.5 flex-1 py-2 text-[11px] transition-colors',
                 pathname === href ? 'text-violet-400' : 'text-zinc-500'
               )}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-4.5 w-4.5" />
               {label}
             </Link>
           ))}

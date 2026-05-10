@@ -18,6 +18,17 @@ async function getUserData(username: string) {
   }
 }
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ username: string }>;
+}) {
+  const { username } = await params;
+  const data = await getUserData(username);
+  const name = data?.profile.display_name ?? data?.profile.username ?? username;
+  return { title: name };
+}
+
 export default async function UserProfilePage({
   params,
 }: {
@@ -39,8 +50,8 @@ export default async function UserProfilePage({
   return (
     <div className="max-w-3xl mx-auto px-4 py-12 space-y-8">
       <div className="text-center space-y-2">
-        <div className="w-16 h-16 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-2xl mx-auto">
-          🎟️
+        <div className="w-16 h-16 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center mx-auto">
+          <img src="/logo-mark.png" alt="Rifando" className="h-9 w-9" />
         </div>
         <h1 className="text-2xl font-bold text-zinc-50">
           {profile.display_name ?? profile.username}

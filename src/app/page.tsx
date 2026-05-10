@@ -5,7 +5,8 @@ export default function LandingPage() {
     <main className="flex flex-col flex-1 items-center justify-center px-4 py-24 text-center">
       <div className="max-w-2xl space-y-6">
         <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-sm text-violet-400">
-          🎟️ Rifas online simples y profesionales
+          <img src="/logo-mark.png" alt="" className="h-4 w-4" aria-hidden />
+          Rifas online simples y profesionales
         </div>
 
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-zinc-50">

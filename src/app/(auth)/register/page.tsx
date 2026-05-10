@@ -1,11 +1,13 @@
 import Link from 'next/link';
 
+export const metadata = { title: 'Registrarse' };
+
 export default function RegisterPage() {
   return (
     <div className="flex flex-col flex-1 items-center justify-center px-4 py-16">
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="flex items-center justify-center w-16 h-16 rounded-full bg-violet-600/10 border border-violet-500/20 mx-auto">
-          <span className="text-3xl">🎟️</span>
+          <img src="/logo-mark.png" alt="Rifando" className="h-9 w-9" />
         </div>
 
         <div className="space-y-2">

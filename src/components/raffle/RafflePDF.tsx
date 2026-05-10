@@ -7,6 +7,7 @@ interface Props {
   raffle: Raffle;
   prizes: Prize[];
   qrDataUrl: string;
+  logoUrl: string;
   username: string;
 }
 
@@ -44,11 +45,11 @@ const s = StyleSheet.create({
     borderBottomColor: C.violet,
     borderBottomStyle: 'solid',
   },
-  logoText: {
-    fontSize: 28,
-    fontFamily: 'Helvetica-Bold',
-    color: C.violet,
-    letterSpacing: 5,
+  logoImg: {
+    height: 48,
+    width: 'auto',
+    objectFit: 'contain',
+    marginBottom: 2,
   },
   logoSub: {
     fontSize: 8.5,
@@ -205,7 +206,7 @@ const s = StyleSheet.create({
   },
 });
 
-export function RafflePDFDocument({ raffle, prizes, qrDataUrl, username }: Props) {
+export function RafflePDFDocument({ raffle, prizes, qrDataUrl, logoUrl, username }: Props) {
   const publicUrl = `rifando.app/${username}/${raffle.slug}`;
   const sorted = [...prizes].sort((a, b) => a.position - b.position);
 
@@ -221,7 +222,7 @@ export function RafflePDFDocument({ raffle, prizes, qrDataUrl, username }: Props
 
         {/* ── Header ── */}
         <View style={s.header}>
-          <Text style={s.logoText}>RIFANDO</Text>
+          <Image src={logoUrl} style={s.logoImg} />
           <Text style={s.logoSub}>Tu plataforma de rifas online</Text>
         </View>
 
@@ -305,7 +306,7 @@ export function RafflePDFDocument({ raffle, prizes, qrDataUrl, username }: Props
         {/* ── Footer ── */}
         <View style={s.footer} fixed>
           <Text style={s.footerLeft}>Generado por Rifando · rifando.app</Text>
-          <Text style={s.footerRight}>RIFANDO</Text>
+          <Image src={logoUrl} style={{ height: 16, width: 'auto', objectFit: 'contain' }} />
         </View>
       </Page>
     </Document>
