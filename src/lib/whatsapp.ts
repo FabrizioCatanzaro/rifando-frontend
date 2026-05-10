@@ -1,5 +1,12 @@
 import type { Promotion } from '@/types';
 
+interface TransferInfo {
+  alias: string | null;
+  holder: string | null;
+  cuit: string | null;
+  bank: string | null;
+}
+
 interface BuildUrlParams {
   numbers: number[];
   raffleName: string;
@@ -7,6 +14,7 @@ interface BuildUrlParams {
   pricePerNumber: number;
   promotions: Promotion[];
   whatsappNumber: string;
+  transferInfo?: TransferInfo;
 }
 
 export function calculatePrice(
@@ -41,7 +49,7 @@ export function calculatePrice(
 }
 
 export function buildWhatsAppUrl(params: BuildUrlParams): string {
-  const { numbers, raffleName, buyerName, pricePerNumber, promotions, whatsappNumber } = params;
+  const { numbers, raffleName, buyerName, pricePerNumber, promotions, whatsappNumber, transferInfo } = params;
   const sorted = [...numbers].sort((a, b) => a - b);
   const { total, promotionLabel } = calculatePrice(numbers.length, pricePerNumber, promotions);
 
@@ -51,21 +59,25 @@ export function buildWhatsAppUrl(params: BuildUrlParams): string {
     minimumFractionDigits: 0,
   }).format(total);
 
-  let msg = `Hola! Quiero comprar números en Rifando:\n
-            -------------------------\n
-            RIFA: *${raffleName}* \n
-            NÚMEROS: *${sorted.join(', ')}* \n\n
-            -------------------------\n
-            Mi nombre es: ${buyerName}\n
-            Total: $${priceStr}\n
-            `;
+  let msg = `Hola! Quiero comprar números en Rifando:\n\n`;
+  msg += `🎟 *${raffleName}*\n`;
+  msg += `Números: *${sorted.join(', ')}*\n`;
+  msg += `Nombre: ${buyerName}\n`;
+  msg += `Total: *${priceStr}*`;
 
   if (promotionLabel) {
-    msg += `
-    -------------------------\n
-    Promoción aplicada: ${promotionLabel}`;
+    msg += `\nPromoción: ${promotionLabel}`;
   }
 
-  const phone = whatsappNumber.replace(/\D/g, '');
+  if (transferInfo?.alias) {
+    msg += `\n\n💳 *Datos para transferir:*\n`;
+    msg += `Alias: *${transferInfo.alias}*\n`;
+    if (transferInfo.holder) msg += `Titular: ${transferInfo.holder}\n`;
+    if (transferInfo.cuit) msg += `CUIT/CUIL: ${transferInfo.cuit}\n`;
+    if (transferInfo.bank) msg += `Banco: ${transferInfo.bank}`;
+  }
+
+  let phone = whatsappNumber.replace(/\D/g, '');
+  if (!phone.startsWith('54')) phone = `54${phone}`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
 }

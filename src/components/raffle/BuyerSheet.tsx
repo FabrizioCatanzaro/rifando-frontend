@@ -15,6 +15,13 @@ import { formatCurrency } from '@/lib/utils';
 import { buildWhatsAppUrl, calculatePrice } from '@/lib/whatsapp';
 import type { Promotion } from '@/types';
 
+interface TransferInfo {
+  alias: string | null;
+  holder: string | null;
+  cuit: string | null;
+  bank: string | null;
+}
+
 interface BuyerSheetProps {
   open: boolean;
   onClose: () => void;
@@ -23,6 +30,7 @@ interface BuyerSheetProps {
   pricePerNumber: number;
   promotions: Promotion[];
   whatsappNumber: string;
+  transferInfo: TransferInfo;
   sessionId: string;
   onReserve: (params: {
     numbers: number[];
@@ -39,6 +47,7 @@ export function BuyerSheet({
   pricePerNumber,
   promotions,
   whatsappNumber,
+  transferInfo,
   sessionId,
   onReserve,
 }: BuyerSheetProps) {
@@ -76,6 +85,7 @@ export function BuyerSheet({
         pricePerNumber,
         promotions,
         whatsappNumber,
+        transferInfo,
       });
       window.open(url, '_blank');
       setName('');
@@ -127,6 +137,36 @@ export function BuyerSheet({
                   <p className="text-xs text-violet-400">{promotionLabel}</p>
                 )}
               </div>
+
+              {transferInfo.alias && (
+                <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">Datos para transferir</p>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-zinc-500 shrink-0">Alias</span>
+                      <span className="text-zinc-100 font-mono font-medium text-right">{transferInfo.alias}</span>
+                    </div>
+                    {transferInfo.holder && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-zinc-500 shrink-0">Titular</span>
+                        <span className="text-zinc-100 text-right">{transferInfo.holder}</span>
+                      </div>
+                    )}
+                    {transferInfo.cuit && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-zinc-500 shrink-0">CUIT/CUIL</span>
+                        <span className="text-zinc-100 text-right">{transferInfo.cuit}</span>
+                      </div>
+                    )}
+                    {transferInfo.bank && (
+                      <div className="flex justify-between gap-2">
+                        <span className="text-zinc-500 shrink-0">Banco</span>
+                        <span className="text-zinc-100 text-right">{transferInfo.bank}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="buyer-name">Tu nombre completo</Label>

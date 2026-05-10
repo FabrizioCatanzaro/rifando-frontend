@@ -5,6 +5,10 @@ export interface User {
   display_name: string | null;
   avatar_url: string | null;
   whatsapp_number: string | null;
+  transfer_alias: string | null;
+  transfer_holder: string | null;
+  transfer_cuit: string | null;
+  transfer_bank: string | null;
   profile_public: boolean;
   created_at: string;
 }
@@ -72,6 +76,10 @@ export interface PublicRaffleData {
     username: string;
     display_name: string | null;
     whatsapp_number: string | null;
+    transfer_alias: string | null;
+    transfer_holder: string | null;
+    transfer_cuit: string | null;
+    transfer_bank: string | null;
   };
   prizes: Prize[];
   promotions: Promotion[];

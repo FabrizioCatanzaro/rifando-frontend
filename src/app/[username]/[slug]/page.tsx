@@ -1,5 +1,5 @@
 'use client';
-import { use, useState } from 'react';
+import { use, useState, useEffect } from 'react';
 import { usePublicRaffle } from '@/hooks/useRaffle';
 import { useNumbers, useReserveNumbers } from '@/hooks/useNumbers';
 import { useSelectionStore } from '@/stores/selectionStore';
@@ -43,6 +43,9 @@ export default function PublicRafflePage({
   const selectedArr = Array.from(selected);
   const raffle = data?.raffle;
   const owner = data?.owner;
+  useEffect(() => {
+    if (raffle) document.title = `Rifando — ${raffle.title}`;
+  }, [raffle]);
   const promotions = data?.promotions ?? [];
   const prizes: Prize[] = data?.prizes ?? [];
 
@@ -411,6 +414,12 @@ export default function PublicRafflePage({
         pricePerNumber={raffle.price_per_number}
         promotions={promotions}
         whatsappNumber={owner.whatsapp_number ?? ''}
+        transferInfo={{
+          alias: owner.transfer_alias,
+          holder: owner.transfer_holder,
+          cuit: owner.transfer_cuit,
+          bank: owner.transfer_bank,
+        }}
         sessionId={sessionId}
         onReserve={handleReserve}
       />
