@@ -17,7 +17,8 @@ import { useNumbers, useBulkSell, useBulkRelease } from '@/hooks/useNumbers';
 import { useAuthStore } from '@/stores/authStore';
 import { formatCurrency, formatPercent, formatDate } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
-import { Plus, Trash2, ImagePlus, Lock, Copy, Search } from 'lucide-react';
+import { Plus, Trash2, ImagePlus, Lock, Copy, Search, Download } from 'lucide-react';
+import { exportGridAsImage } from '@/lib/exportGrid';
 import { RichTextEditor } from '@/components/raffle/RichTextEditor';
 import type { Prize, Promotion } from '@/types';
 
@@ -111,6 +112,9 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   const [bulkBuyerName, setBulkBuyerName] = useState('');
   const [adminSearchNum, setAdminSearchNum] = useState('');
   const [adminHighlighted, setAdminHighlighted] = useState<number | undefined>();
+  const [adminGridFilter, setAdminGridFilter] = useState<'all' | 'available' | 'sold' | 'reserved'>('all');
+  const [buyerSort, setBuyerSort] = useState<'name' | 'date' | 'count'>('name');
+  const [buyerSortDir, setBuyerSortDir] = useState<'asc' | 'desc'>('asc');
 
   // Prize state
   const [addingPrize, setAddingPrize] = useState(false);
@@ -855,62 +859,9 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
 
       {/* ── Tab: Números ── */}
       {tab === 'numbers' && (
-        <div className="space-y-4">
-          {/* Bulk action bar */}
-          {adminSelected.size > 0 && (
-            <div className="bg-zinc-900 border border-violet-500/30 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-zinc-100">
-                  {adminSelected.size} número{adminSelected.size !== 1 ? 's' : ''} seleccionado{adminSelected.size !== 1 ? 's' : ''}
-                </p>
-                <button onClick={clearAdminSelection} className="text-xs text-zinc-500 hover:text-zinc-300">
-                  Cancelar
-                </button>
-              </div>
-
-              {bulkAction === 'sell' ? (
-                <div className="flex gap-2">
-                  <Input
-                    value={bulkBuyerName}
-                    onChange={(e) => setBulkBuyerName(e.target.value)}
-                    placeholder="Nombre del comprador"
-                    className="bg-zinc-950 border-zinc-700 flex-1"
-                    autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && handleBulkSell()}
-                  />
-                  <Button onClick={handleBulkSell} className="bg-green-600 hover:bg-green-500 shrink-0" disabled={!bulkBuyerName.trim() || bulkSell.isPending}>
-                    Confirmar venta
-                  </Button>
-                  <Button variant="ghost" onClick={() => setBulkAction(null)} className="shrink-0">Atrás</Button>
-                </div>
-              ) : (() => {
-                const selNums = numbersData?.numbers.filter((n) => adminSelected.has(n.number)) ?? [];
-                const anyAlreadySold = selNums.some((n) => n.status === 'sold');
-                const allAvailable = selNums.every((n) => n.status === 'available');
-                return (
-                  <div className="flex gap-2 flex-wrap">
-                    {!anyAlreadySold && (
-                      <Button size="sm" className="bg-green-600 hover:bg-green-500" onClick={() => {
-                        const names = [...new Set(selNums.map((n) => n.buyer_name).filter(Boolean))];
-                        setBulkBuyerName(names.length === 1 ? (names[0] ?? '') : '');
-                        setBulkAction('sell');
-                      }}>
-                        ✅ Marcar como vendidos
-                      </Button>
-                    )}
-                    {!allAvailable && (
-                      <Button size="sm" variant="outline" className="border-zinc-700" onClick={handleBulkRelease} disabled={bulkRelease.isPending}>
-                        🔓 Liberar seleccionados
-                      </Button>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
+        <div className={`space-y-4 ${adminSelected.size > 0 ? 'pb-48 md:pb-36' : ''}`}>
           <p className="text-xs text-zinc-500">
-            Hacé click para seleccionar números. Podés seleccionar varios y luego elegir la acción.
+            Tocá para seleccionar números. Podés seleccionar varios y luego elegir la acción.
           </p>
 
           {/* Search */}
@@ -929,6 +880,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                   const n = parseInt(val, 10);
                   if (!isNaN(n) && n >= 1 && n <= raffle.total_numbers) {
                     setAdminHighlighted(n);
+                    setAdminGridFilter('all');
                     setTimeout(() => {
                       document.getElementById(`admin-num-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }, 50);
@@ -941,10 +893,46 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
+          {/* Filter + export */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {(
+              [
+                { key: 'all', label: 'Todos', count: numbersData?.numbers.length },
+                { key: 'available', label: 'Libres', count: numbersData?.numbers.filter((n) => n.status === 'available').length },
+                { key: 'sold', label: 'Vendidos', count: numbersData?.numbers.filter((n) => n.status === 'sold').length },
+                { key: 'reserved', label: 'Pendientes', count: numbersData?.numbers.filter((n) => n.status === 'reserved').length },
+              ] as const
+            ).map(({ key, label, count }) => (
+              <button
+                key={key}
+                onClick={() => setAdminGridFilter(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                  adminGridFilter === key
+                    ? 'bg-violet-600 border-violet-500 text-white'
+                    : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+                }`}
+              >
+                {label}
+                {count !== undefined && count > 0 && (
+                  <span className={`ml-1.5 ${adminGridFilter === key ? 'text-violet-200' : 'text-zinc-500'}`}>{count}</span>
+                )}
+              </button>
+            ))}
+            <button
+              onClick={() => exportGridAsImage(numbersData?.numbers ?? [], raffle.cover_icon, `${raffle.slug}-grilla.png`)}
+              disabled={!numbersData?.numbers.length}
+              title="Exportar grilla como imagen"
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-violet-500 hover:text-violet-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Exportar imagen
+            </button>
+          </div>
+
           <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
             {numbersLoading
               ? Array.from({ length: 30 }).map((_, i) => <div key={i} className="aspect-square rounded-lg bg-zinc-800 animate-pulse" />)
-              : numbersData?.numbers.map((n) => {
+              : (adminGridFilter === 'all' ? numbersData?.numbers : numbersData?.numbers?.filter((n) => n.status === adminGridFilter))?.map((n) => {
                   const isSelected = adminSelected.has(n.number);
                   const isHighlighted = n.number === adminHighlighted;
                   const isSold = n.status === 'sold';
@@ -956,7 +944,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                       id={`admin-num-${n.number}`}
                       title={n.buyer_name ? `${n.buyer_name}${isReserved ? ' (reservado)' : ''}` : undefined}
                       onClick={() => toggleAdminNumber(n.number)}
-                      className={`flex items-center justify-center rounded-lg text-xs font-semibold w-full aspect-square min-h-[44px] transition-all ${
+                      className={`flex items-center justify-center rounded-lg text-xl font-semibold w-full aspect-square min-h-[44px] transition-all ${
                         isHighlighted
                           ? 'ring-2 ring-white ring-offset-1 ring-offset-zinc-950 scale-110 z-10'
                           : ''
@@ -1026,12 +1014,12 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
               <div className="text-center py-16 text-zinc-500">
                 <p className="text-3xl mb-3">⏳</p>
                 <p>No hay reservas pendientes.</p>
-                <p className="text-xs mt-1">Las reservas expiran a los 5 minutos si el comprador no confirma por WhatsApp.</p>
+                <p className="text-xs mt-1">Las reservas expiran a los 30 minutos si el comprador no confirma por WhatsApp.</p>
               </div>
             ) : (
               <>
                 <p className="text-xs text-zinc-500">
-                  Las reservas expiran automáticamente a los 5 minutos. Aceptalas para confirmarlas como ventas.
+                  Las reservas expiran automáticamente a los 30 minutos. Aceptalas para confirmarlas como ventas.
                 </p>
                 {entries.map(([buyerName, nums]) => {
                   const editedName = reservationNames[buyerName] ?? buyerName;
@@ -1104,10 +1092,8 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
       {/* ── Tab: Compradores ── */}
       {tab === 'buyers' && (() => {
         const withBuyer = (numbersData?.numbers ?? [])
-          .filter((n) => n.buyer_name && n.status === 'sold')
-          .sort((a, b) => a.number - b.number);
+          .filter((n) => n.buyer_name && n.status === 'sold');
 
-        // Group by buyer name
         const grouped = withBuyer.reduce<Record<string, typeof withBuyer>>((acc, n) => {
           const key = n.buyer_name!;
           if (!acc[key]) acc[key] = [];
@@ -1115,10 +1101,57 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
           return acc;
         }, {});
 
-        const entries = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+        const entries = Object.entries(grouped).sort(([nameA, numsA], [nameB, numsB]) => {
+          let cmp = 0;
+          if (buyerSort === 'name') {
+            cmp = nameA.localeCompare(nameB);
+          } else if (buyerSort === 'date') {
+            const minA = numsA.reduce((m, n) => (n.sold_at && n.sold_at < m ? n.sold_at : m), numsA[0]?.sold_at ?? '');
+            const minB = numsB.reduce((m, n) => (n.sold_at && n.sold_at < m ? n.sold_at : m), numsB[0]?.sold_at ?? '');
+            cmp = minA.localeCompare(minB);
+          } else {
+            cmp = numsA.length - numsB.length;
+          }
+          return buyerSortDir === 'asc' ? cmp : -cmp;
+        });
+
+        const sortOptions: { key: typeof buyerSort; label: string }[] = [
+          { key: 'name', label: 'Nombre' },
+          { key: 'date', label: 'Fecha' },
+          { key: 'count', label: 'Cantidad' },
+        ];
 
         return (
           <div className="space-y-3">
+            {/* Sort controls */}
+            {entries.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-zinc-500">Ordenar por:</span>
+                {sortOptions.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      if (buyerSort === key) {
+                        setBuyerSortDir((d) => d === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setBuyerSort(key);
+                        setBuyerSortDir('asc');
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border flex items-center gap-1 ${
+                      buyerSort === key
+                        ? 'bg-violet-600 border-violet-500 text-white'
+                        : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+                    }`}
+                  >
+                    {label}
+                    {buyerSort === key && (
+                      <span className="text-[10px]">{buyerSortDir === 'asc' ? '↑' : '↓'}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
             {entries.length === 0 ? (
               <div className="text-center py-16 text-zinc-500">
                 <p className="text-3xl mb-3">👤</p>
@@ -1267,6 +1300,90 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
               </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Admin sticky bottom bar (números tab) ── */}
+      {tab === 'numbers' && adminSelected.size > 0 && (
+        <div className="fixed bottom-14 md:bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-sm border-t-2 border-violet-700/60 px-4 py-4 space-y-3 shadow-2xl md:pl-64">
+
+          {/* Row 1: count + cancel */}
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-base font-bold text-zinc-100">
+              {adminSelected.size} número{adminSelected.size !== 1 ? 's' : ''} seleccionado{adminSelected.size !== 1 ? 's' : ''}
+            </p>
+            <button onClick={clearAdminSelection} className="text-sm text-zinc-500 hover:text-zinc-300 shrink-0">
+              Cancelar
+            </button>
+          </div>
+
+          {/* Owner chips */}
+          {(() => {
+            const withOwner = (numbersData?.numbers ?? [])
+              .filter((n) => adminSelected.has(n.number) && n.buyer_name)
+              .sort((a, b) => a.number - b.number);
+            if (withOwner.length === 0) return null;
+            return (
+              <div className="flex flex-wrap gap-1.5">
+                {withOwner.map((n) => (
+                  <span
+                    key={n.number}
+                    className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-medium ${
+                      n.status === 'sold'
+                        ? 'bg-green-950/60 border border-green-700/50 text-green-300'
+                        : 'bg-amber-950/60 border border-amber-700/50 text-amber-300'
+                    }`}
+                  >
+                    <span className="font-bold">#{n.number}</span>
+                    <span className="text-zinc-500">·</span>
+                    <span>{n.buyer_name}</span>
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Actions */}
+          {bulkAction === 'sell' ? (
+            <div className="flex gap-2">
+              <Input
+                value={bulkBuyerName}
+                onChange={(e) => setBulkBuyerName(e.target.value)}
+                placeholder="Nombre del comprador"
+                className="bg-zinc-900 border-zinc-700 flex-1"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleBulkSell()}
+              />
+              <Button onClick={handleBulkSell} className="bg-green-600 hover:bg-green-500 shrink-0" disabled={!bulkBuyerName.trim() || bulkSell.isPending}>
+                Confirmar
+              </Button>
+              <Button variant="ghost" onClick={() => setBulkAction(null)} className="shrink-0 text-zinc-400">
+                Atrás
+              </Button>
+            </div>
+          ) : (() => {
+            const selNums = numbersData?.numbers.filter((n) => adminSelected.has(n.number)) ?? [];
+            const anyAlreadySold = selNums.some((n) => n.status === 'sold');
+            const allAvailable = selNums.every((n) => n.status === 'available');
+            return (
+              <div className="flex gap-2 flex-wrap">
+                {!anyAlreadySold && (
+                  <Button size="sm" className="bg-green-600 hover:bg-green-500" onClick={() => {
+                    const names = [...new Set(selNums.map((n) => n.buyer_name).filter(Boolean))];
+                    setBulkBuyerName(names.length === 1 ? (names[0] ?? '') : '');
+                    setBulkAction('sell');
+                  }}>
+                    ✅ Marcar como vendidos
+                  </Button>
+                )}
+                {!allAvailable && (
+                  <Button size="sm" variant="outline" className="border-zinc-700" onClick={handleBulkRelease} disabled={bulkRelease.isPending}>
+                    🔓 Liberar seleccionados
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
