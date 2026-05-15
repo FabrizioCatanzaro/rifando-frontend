@@ -385,12 +385,12 @@ export default function PublicRafflePage({
 
       {/* Sticky bottom bar */}
       {raffle.status === 'active' && selectedArr.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-zinc-950 border-t border-zinc-800 px-4 py-3 flex items-center gap-3">
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-zinc-950/95 backdrop-blur-sm border-t-2 border-violet-700/60 px-4 py-5 flex items-center gap-3 shadow-2xl">
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-zinc-100 font-semibold">
+            <p className="text-base text-zinc-100 font-bold">
               {selectedArr.length} número{selectedArr.length > 1 ? 's' : ''} · {formatCurrency(total)}
             </p>
-            {promotionLabel && <p className="text-xs text-violet-400 truncate">{promotionLabel}</p>}
+            {promotionLabel && <p className="text-sm text-violet-400 truncate">{promotionLabel}</p>}
           </div>
           <Button variant="ghost" size="sm" onClick={clear} className="text-zinc-500 shrink-0">
             Limpiar
@@ -398,9 +398,10 @@ export default function PublicRafflePage({
           <Button
             onClick={handleConfirm}
             disabled={reserveNumbers.isPending}
-            className="bg-green-600 hover:bg-green-500 text-white gap-2 shrink-0"
+            size="lg"
+            className="bg-green-600 hover:bg-green-500 text-white gap-2 shrink-0 font-bold"
           >
-            <MessageCircle className="h-4 w-4" />
+            <MessageCircle className="h-5 w-5" />
             {reserveNumbers.isPending ? 'Reservando...' : 'Confirmar'}
           </Button>
         </div>

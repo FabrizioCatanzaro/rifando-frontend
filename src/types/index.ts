@@ -43,6 +43,7 @@ export interface RaffleNumber {
   number: number;
   status: 'available' | 'reserved' | 'sold';
   buyer_name: string | null;
+  sold_at: string | null;
 }
 
 export interface Prize {

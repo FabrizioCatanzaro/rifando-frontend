@@ -10,7 +10,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Copy, Check } from 'lucide-react';
+import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/utils';
 import { buildWhatsAppUrl, calculatePrice } from '@/lib/whatsapp';
 import type { Promotion } from '@/types';
@@ -54,6 +55,7 @@ export function BuyerSheet({
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [unavailable, setUnavailable] = useState<number[]>([]);
+  const [aliasCopied, setAliasCopied] = useState(false);
 
   const pending = selectedNumbers.filter((n) => !unavailable.includes(n));
   const sorted = [...pending].sort((a, b) => a - b);
@@ -142,9 +144,24 @@ export function BuyerSheet({
                 <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3 space-y-2">
                   <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">Datos para transferir</p>
                   <div className="space-y-1 text-sm">
-                    <div className="flex justify-between gap-2">
-                      <span className="text-zinc-500 shrink-0">Alias</span>
-                      <span className="text-zinc-100 font-mono font-medium text-right">{transferInfo.alias}</span>
+                    <div className="flex justify-between gap-2 items-center">
+                      <span className="text-zinc-500 shrink-0">Alias o CBU/CVU</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-zinc-100 font-mono font-medium text-right">{transferInfo.alias}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(transferInfo.alias!);
+                            setAliasCopied(true);
+                            toast.success('Alias copiado');
+                            setTimeout(() => setAliasCopied(false), 2000);
+                          }}
+                          className="text-zinc-500 hover:text-zinc-200 transition-colors shrink-0"
+                          title="Copiar alias"
+                        >
+                          {aliasCopied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
                     </div>
                     {transferInfo.holder && (
                       <div className="flex justify-between gap-2">
@@ -180,6 +197,10 @@ export function BuyerSheet({
                 />
               </div>
 
+              <p className="text-xs text-zinc-500 text-center">
+                Una vez que confirmes, tus números quedan reservados por 30 minutos.
+              </p>
+
               <Button
                 onClick={handleSend}
                 disabled={!name.trim() || loading}
@@ -187,7 +208,7 @@ export function BuyerSheet({
                 size="lg"
               >
                 <MessageCircle className="h-5 w-5" />
-                {loading ? 'Reservando...' : 'Enviar por WhatsApp'}
+                {loading ? 'Reservando...' : 'Confirmar'}
               </Button>
             </div>
           )}

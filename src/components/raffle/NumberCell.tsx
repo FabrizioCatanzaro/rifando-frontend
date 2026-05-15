@@ -37,32 +37,29 @@ export function NumberCell({ data, coverIcon, isSelected, onToggle, readOnly = f
           'ring-2 ring-white ring-offset-1 ring-offset-zinc-950 scale-110 z-10',
       )}
     >
-      {/* Sold: diagonal line + number */}
       {status === 'sold' && (
         <>
-          <span aria-hidden className="absolute inset-0 flex items-center justify-center text-xl leading-none pointer-events-none">
+          <span aria-hidden className="absolute inset-0 flex items-center justify-center text-xl leading-none pointer-events-none select-none">
             {coverIcon}
           </span>
-          <span className="absolute top-0.5 right-0.5 z-10 text-[10px] font-bold text-white leading-none bg-black/60 rounded px-0.5 py-px">
+          <span className="absolute top-0.5 left-0.5 text-[12px] font-bold text-white leading-none rounded px-0.5 py-px">
             {number}
           </span>
         </>
       )}
 
-      {/* Reserved: emoji in center + number badge in corner */}
       {status === 'reserved' && (
         <>
-          <span aria-hidden className="absolute inset-0 flex items-center justify-center text-xl leading-none pointer-events-none">
+          <span aria-hidden className="absolute inset-0 flex items-center justify-center text-xl leading-none pointer-events-none select-none">
             {coverIcon}
           </span>
-          <span className="absolute top-0.5 right-0.5 z-10 text-[10px] font-bold text-white leading-none bg-black/60 rounded px-0.5 py-px">
+          <span className="absolute top-0.5 left-0.5 text-[12px] font-bold text-amber-300 leading-none bg-black/60 rounded px-0.5 py-px">
             {number}
           </span>
         </>
       )}
 
-      {/* Available: just the number */}
-      {status === 'available' && number}
+      {status === 'available' && <span className="text-xl font-bold">{number}</span>}
     </button>
   );
 }
