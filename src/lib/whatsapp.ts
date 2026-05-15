@@ -60,7 +60,7 @@ export function buildWhatsAppUrl(params: BuildUrlParams): string {
   }).format(total);
 
   let msg = `Hola! Quiero comprar números en Rifando:\n\n`;
-  msg += `🎟 *${raffleName}*\n`;
+  msg += `*${raffleName}*\n`;
   msg += `Números: *${sorted.join(', ')}*\n`;
   msg += `Nombre: ${buyerName}\n`;
   msg += `Total: *${priceStr}*`;
@@ -70,8 +70,8 @@ export function buildWhatsAppUrl(params: BuildUrlParams): string {
   }
 
   if (transferInfo?.alias) {
-    msg += `\n\n💳 *Datos para transferir:*\n`;
-    msg += `Alias: *${transferInfo.alias}*\n`;
+    msg += `\n\n*Datos para transferir:*\n`;
+    msg += `Alias: ${transferInfo.alias}\n`;
     if (transferInfo.holder) msg += `Titular: ${transferInfo.holder}\n`;
     if (transferInfo.cuit) msg += `CUIT/CUIL: ${transferInfo.cuit}\n`;
     if (transferInfo.bank) msg += `Banco: ${transferInfo.bank}`;
