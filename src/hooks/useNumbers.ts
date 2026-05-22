@@ -14,7 +14,7 @@ export function useNumbers(raffleId: string) {
 export function useReserveNumbers(raffleId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { numbers: number[]; session_id: string; buyer_name?: string }) =>
+    mutationFn: (data: { numbers: number[]; session_id: string; buyer_name?: string; comprobante_url?: string }) =>
       api.post<{ reserved: number[]; failed: number[]; expires_at: string }>(
         `/api/raffles/${raffleId}/numbers/reserve`,
         data

@@ -640,6 +640,42 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
             <p className="text-xs text-zinc-500">Siempre editable, incluso con la rifa publicada.</p>
           </div>
 
+          {/* ── Confirmation method ── */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
+            <SectionTitle>Método de confirmación</SectionTitle>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { value: 'whatsapp', label: 'WhatsApp', description: 'El comprador te escribe por WhatsApp con los datos.' },
+                  { value: 'upload', label: 'Comprobante', description: 'El comprador adjunta el comprobante en la página.' },
+                ] as const
+              ).map(({ value, label, description }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={async () => {
+                    if (raffle.confirmation_method === value) return;
+                    try {
+                      await updateRaffle.mutateAsync({ confirmation_method: value } as never);
+                      toast.success('Método de confirmación actualizado');
+                    } catch {
+                      toast.error('Error al actualizar');
+                    }
+                  }}
+                  className={`text-left p-3 rounded-xl border transition-colors space-y-0.5 ${
+                    raffle.confirmation_method === value
+                      ? 'border-violet-500 bg-violet-600/10'
+                      : 'border-zinc-700 bg-zinc-950 hover:border-zinc-500'
+                  }`}
+                >
+                  <p className={`text-sm font-medium ${raffle.confirmation_method === value ? 'text-violet-300' : 'text-zinc-200'}`}>{label}</p>
+                  <p className="text-xs text-zinc-500 leading-snug">{description}</p>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-500">Siempre editable, incluso con la rifa publicada.</p>
+          </div>
+
           {/* ── Promotions ── */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
             <SectionTitle>Promociones</SectionTitle>

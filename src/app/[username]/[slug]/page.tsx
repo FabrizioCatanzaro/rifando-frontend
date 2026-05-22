@@ -14,6 +14,7 @@ import { calculatePrice } from '@/lib/whatsapp';
 import { toast } from 'sonner';
 import { MessageCircle, Lock, Share2, ClipboardCheck, Search } from 'lucide-react';
 import { RichTextView } from '@/components/raffle/RichTextView';
+import Link from 'next/link';
 import { ApiError } from '@/lib/api';
 import type { Prize } from '@/types';
 
@@ -139,7 +140,7 @@ export default function PublicRafflePage({
     setSheetOpen(true);
   };
 
-  const handleReserve = async (params: { numbers: number[]; session_id: string; buyer_name: string }) => {
+  const handleReserve = async (params: { numbers: number[]; session_id: string; buyer_name: string; comprobante_url?: string }) => {
     const res = await reserveNumbers.mutateAsync(params);
     if (res.failed.length > 0 && res.reserved.length === 0) {
       toast.error('Todos los números ya no estaban disponibles.');
@@ -210,7 +211,13 @@ export default function PublicRafflePage({
 
           {owner.display_name && (
             <p className="text-xs text-zinc-500">
-              Organizado por <span className="text-zinc-400">{owner.display_name}</span>
+              Organizado por{' '}
+              <Link
+                href={`/${username}`}
+                className="text-zinc-400 hover:text-violet-400 transition-colors underline underline-offset-2"
+              >
+                {owner.display_name}
+              </Link>
             </p>
           )}
         </div>
@@ -422,6 +429,7 @@ export default function PublicRafflePage({
           bank: owner.transfer_bank,
         }}
         sessionId={sessionId}
+        confirmationMethod={raffle.confirmation_method ?? 'whatsapp'}
         onReserve={handleReserve}
       />
     </div>

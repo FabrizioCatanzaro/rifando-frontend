@@ -76,8 +76,8 @@ export function exportGridAsImage(
       ctx.fillStyle = '#fff';
       ctx.fillText(coverIcon, cx, cy);
     } else {
-      ctx.font = `600 ${Math.max(9, Math.floor(CELL * 0.27))}px ui-monospace, monospace`;
-      ctx.fillStyle = status === 'reserved' ? '#fbbf24' : '#71717a';
+      ctx.font = `700 ${Math.max(11, Math.floor(CELL * 0.42))}px ui-monospace, monospace`;
+      ctx.fillStyle = status === 'reserved' ? '#fbbf24' : '#d4d4d8';
       ctx.fillText(String(number), cx, cy);
     }
   });

@@ -30,6 +30,7 @@ export interface Raffle {
   prize_assignment_mode: 'automatic' | 'sequential_choice';
   winner_number: number | null;
   rich_content: Record<string, unknown> | null;
+  confirmation_method: 'whatsapp' | 'upload';
   created_at: string;
   updated_at: string;
   stats?: {
