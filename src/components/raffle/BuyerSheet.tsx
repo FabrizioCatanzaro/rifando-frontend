@@ -155,9 +155,12 @@ export function BuyerSheet({
     onClose();
   };
 
-  const whatsappConsultUrl = whatsappNumber
-    ? `https://wa.me/${whatsappNumber.replace(/\D/g, '')}?text=${encodeURIComponent('Hola, tengo una consulta sobre la rifa "' + raffleName + '"')}`
-    : null;
+  const whatsappConsultUrl = (() => {
+    if (!whatsappNumber) return null;
+    let phone = whatsappNumber.replace(/\D/g, '');
+    if (!phone.startsWith('54')) phone = `54${phone}`;
+    return `https://wa.me/${phone}?text=${encodeURIComponent(`Hola, tengo una consulta sobre la rifa "${raffleName}"`)}`;
+  })();
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && resetAndClose()}>
