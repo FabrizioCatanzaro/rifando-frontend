@@ -409,7 +409,7 @@ export default function PublicRafflePage({
             className="bg-green-600 hover:bg-green-500 text-white gap-2 shrink-0 font-bold"
           >
             <MessageCircle className="h-5 w-5" />
-            {reserveNumbers.isPending ? 'Reservando...' : 'Confirmar'}
+            {reserveNumbers.isPending ? 'Reservando...' : 'Continuar'}
           </Button>
         </div>
       )}
