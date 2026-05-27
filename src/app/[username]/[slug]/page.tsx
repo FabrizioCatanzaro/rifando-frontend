@@ -53,6 +53,8 @@ export default function PublicRafflePage({
   const hasPurpose =
     !!raffle?.rich_content && Object.keys(raffle.rich_content).length > 0;
 
+  const isFinished = raffle?.status === 'finished';
+
   const tabs: { key: PublicTab; label: string }[] = [
     { key: 'numbers', label: 'Números' },
     { key: 'prizes', label: `Premios${prizes.length > 0 ? ` (${prizes.length})` : ''}` },
@@ -208,6 +210,22 @@ export default function PublicRafflePage({
             </div>
             <Progress value={percent} className="h-1.5" />
           </div>
+
+          {isFinished && prizes.some((p) => p.winner_number !== null) && (
+            <div className="bg-yellow-950/30 border border-yellow-700/40 rounded-xl px-4 py-3 space-y-2">
+              <p className="text-sm font-semibold text-yellow-400">🏆 Ganadores</p>
+              <div className="space-y-1">
+                {[...prizes].sort((a, b) => a.position - b.position).filter((p) => p.winner_number !== null).map((prize, idx) => (
+                  <div key={prize.id} className="flex items-center gap-2 text-sm">
+                    <span className="text-zinc-500 shrink-0">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}°`}</span>
+                    <span className="text-zinc-300 font-medium">#{prize.winner_number}</span>
+                    {prize.winner_buyer_name && <span className="text-zinc-400">— {prize.winner_buyer_name}</span>}
+                    <span className="text-zinc-600 truncate hidden sm:block">· {prize.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {owner.display_name && (
             <p className="text-xs text-zinc-500">
@@ -373,9 +391,28 @@ export default function PublicRafflePage({
                         <p className="text-sm text-zinc-400 mt-1">{prize.description}</p>
                       )}
                       {prize.winner_number !== null && (
-                        <p className="text-sm text-yellow-400 mt-2 font-medium">
-                          🏆 Ganado por el número #{prize.winner_number}
-                        </p>
+                        <div className="mt-3 space-y-1">
+                          <div className="flex items-center gap-2 bg-yellow-950/30 border border-yellow-700/40 rounded-lg px-3 py-2">
+                            <span className="text-yellow-400 text-base shrink-0">🏆</span>
+                            <div className="min-w-0">
+                              <span className="text-yellow-400 font-bold">#{prize.winner_number}</span>
+                              {prize.winner_buyer_name && (
+                                <span className="text-yellow-300/80 text-sm ml-1.5">— {prize.winner_buyer_name}</span>
+                              )}
+                            </div>
+                          </div>
+                          {prize.substitutes && prize.substitutes.length > 0 && (
+                            <div className="pl-1 space-y-0.5">
+                              {prize.substitutes.map((s, si) => (
+                                <p key={s.number} className="text-xs text-zinc-500 flex items-center gap-1.5">
+                                  <span>Suplente {si + 1}:</span>
+                                  <span className="text-zinc-400 font-medium">#{s.number}</span>
+                                  {s.buyer_name && <span>— {s.buyer_name}</span>}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

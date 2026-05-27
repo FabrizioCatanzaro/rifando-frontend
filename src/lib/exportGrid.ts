@@ -20,17 +20,36 @@ function roundRect(
   ctx.closePath();
 }
 
+function calcCols(total: number, cell: number, gap: number, pad: number): number {
+  const TARGET = 9 / 16;
+  let bestCols = 10;
+  let bestDiff = Infinity;
+
+  for (let cols = 10; cols <= Math.min(total, 200); cols += 10) {
+    const rows = Math.ceil(total / cols);
+    const W = pad * 2 + cols * cell + (cols - 1) * gap;
+    const H = pad * 2 + rows * cell + (rows - 1) * gap;
+    const diff = Math.abs(W / H - TARGET);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestCols = cols;
+    }
+  }
+  return bestCols;
+}
+
 export function exportGridAsImage(
   numbers: NumberItem[],
   coverIcon: string,
   fileName = 'grilla.png'
 ) {
-  const COLS = 10;
   const total = numbers.length;
   const CELL = total > 500 ? 28 : total > 200 ? 36 : 44;
   const GAP = total > 500 ? 3 : 4;
   const PAD = 20;
   const SCALE = 2;
+
+  const COLS = calcCols(total, CELL, GAP, PAD);
   const rows = Math.ceil(total / COLS);
 
   const W = PAD * 2 + COLS * CELL + (COLS - 1) * GAP;

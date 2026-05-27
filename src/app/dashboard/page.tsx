@@ -64,9 +64,9 @@ export default function DashboardPage() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-zinc-100">Mis rifas</h2>
-          <a href="/dashboard/raffles" className="text-sm text-violet-400 hover:text-violet-300">
+          <LinkButton href="/dashboard/raffles" variant="ghost" size="sm" className="text-violet-400 hover:text-violet-300 -mr-2">
             Ver todas
-          </a>
+          </LinkButton>
         </div>
 
         {isLoading ? (

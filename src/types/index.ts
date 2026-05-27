@@ -10,6 +10,7 @@ export interface User {
   transfer_cuit: string | null;
   transfer_bank: string | null;
   profile_public: boolean;
+  is_admin?: boolean;
   created_at: string;
 }
 
@@ -31,6 +32,7 @@ export interface Raffle {
   winner_number: number | null;
   rich_content: Record<string, unknown> | null;
   confirmation_method: 'whatsapp' | 'upload';
+  draw_unlocked: boolean;
   created_at: string;
   updated_at: string;
   stats?: {
@@ -55,6 +57,9 @@ export interface Prize {
   image_url: string | null;
   position: number;
   winner_number: number | null;
+  substitute_numbers: number[];
+  winner_buyer_name?: string | null;
+  substitutes?: { number: number; buyer_name: string | null }[];
   created_at: string;
 }
 
@@ -69,6 +74,22 @@ export interface Promotion {
   free_numbers: number | null;
   active: boolean;
   created_at: string;
+}
+
+export interface DrawPayment {
+  id: string;
+  raffle_id: string;
+  comprobante_url: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface AdminDrawPayment extends DrawPayment {
+  raffle_title: string;
+  raffle_slug: string;
+  owner_username: string;
+  owner_email: string;
 }
 
 export interface PublicRaffleData {

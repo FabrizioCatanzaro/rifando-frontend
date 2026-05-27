@@ -12,12 +12,13 @@ import {
   useMyRaffles, useUpdateRaffle, useDeleteRaffle,
   usePrizes, useCreatePrize, useUpdatePrize, useDeletePrize,
   usePromotions, useCreatePromotion, useDeletePromotion,
+  useDrawPayment, useSubmitDrawPayment, useExecuteDraw,
 } from '@/hooks/useRaffle';
 import { useNumbers, useBulkSell, useBulkRelease } from '@/hooks/useNumbers';
 import { useAuthStore } from '@/stores/authStore';
 import { formatCurrency, formatPercent, formatDate } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
-import { Plus, Trash2, ImagePlus, Lock, Copy, Search, Download } from 'lucide-react';
+import { Plus, Trash2, ImagePlus, Lock, Copy, Search, Download, Shuffle } from 'lucide-react';
 import { exportGridAsImage } from '@/lib/exportGrid';
 import { RichTextEditor } from '@/components/raffle/RichTextEditor';
 import type { Prize, Promotion } from '@/types';
@@ -96,6 +97,9 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   const deletePrize = useDeletePrize(id);
   const createPromotion = useCreatePromotion(id);
   const deletePromotion = useDeletePromotion(id);
+  const { data: drawPaymentData, refetch: refetchDrawPayment } = useDrawPayment(id);
+  const submitDrawPayment = useSubmitDrawPayment(id);
+  const executeDraw = useExecuteDraw(id);
 
   const [tab, setTab] = useState<'edit' | 'prizes' | 'numbers' | 'reservations' | 'buyers' | 'info' | 'finish'>('edit');
   const [infoContent, setInfoContent] = useState<Record<string, unknown> | null>(null);
@@ -105,6 +109,22 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   const [reservationNames, setReservationNames] = useState<Record<string, string>>({});
   const [selectedIcon, setSelectedIcon] = useState('🔒');
   const [winnerNumber, setWinnerNumber] = useState('');
+
+  // Finish tab mode
+  const [finishMode, setFinishMode] = useState<null | 'manual' | 'draw' | 'close'>(null);
+  const [closeConfirmText, setCloseConfirmText] = useState('');
+
+  // Manual finish: substitutes
+  const [substituteCount, setSubstituteCount] = useState(0);
+  const [allowRepeatManual, setAllowRepeatManual] = useState(false);
+  const [prizeSubstitutes, setPrizeSubstitutes] = useState<Record<string, string[]>>({});
+
+  // Draw mode state
+  const [drawMode, setDrawMode] = useState<'all' | 'sold'>('sold');
+  const [allowRepeat, setAllowRepeat] = useState(false);
+  const [drawComprobantePreview, setDrawComprobantePreview] = useState<string | undefined>();
+  const [drawWinners, setDrawWinners] = useState<number[] | null>(null);
+  const [drawAnimating, setDrawAnimating] = useState(false);
 
   // Multi-select admin numbers
   const [adminSelected, setAdminSelected] = useState<Set<number>>(new Set());
@@ -251,29 +271,93 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
+  const handleSubmitComprobante = async () => {
+    if (!drawComprobantePreview) return;
+    try {
+      const res = await api.post<{ url: string }>('/api/upload/comprobante', { data: drawComprobantePreview });
+      await submitDrawPayment.mutateAsync(res.url);
+      setDrawComprobantePreview(undefined);
+      toast.success('Comprobante enviado. Te avisamos cuando sea aprobado.');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Error al enviar el comprobante');
+    }
+  };
+
+  const handleExecuteDraw = async () => {
+    if (!confirm(`¿Confirmar el sorteo? Se sortearán ${prizes.length || 1} ganador(es) entre los números ${drawMode === 'all' ? 'totales' : 'vendidos'}${allowRepeat ? ' (con repetición)' : ''}. Esta acción no se puede deshacer.`)) return;
+    setDrawAnimating(true);
+    try {
+      const result = await executeDraw.mutateAsync({ mode: drawMode, allow_repeat: allowRepeat });
+      setDrawWinners(result.winners);
+      toast.success('¡Sorteo realizado con éxito!');
+      void refetchDrawPayment();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Error al sortear');
+    } finally {
+      setDrawAnimating(false);
+    }
+  };
+
+  const handleCloseWithoutWinners = async () => {
+    try {
+      await api.post(`/api/raffles/${id}/finish`, {});
+      toast.success('Rifa cerrada sin ganadores.');
+      router.push('/dashboard/raffles');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Error al cerrar');
+    }
+  };
+
   const handleFinish = async () => {
     const sortedPrizes = [...prizes].sort((a, b) => a.position - b.position);
     const hasPrizes = sortedPrizes.length > 0;
+    // Build buyer map from numbers data for repeat-buyer validation
+    const buyerMap = new Map<number, string | null>(
+      (numbersData?.numbers ?? []).map((n) => [n.number, n.buyer_name])
+    );
 
     if (hasPrizes) {
-      // Validate all prize winners
       for (const prize of sortedPrizes) {
         const val = parseInt(prizeWinners[prize.id] ?? '', 10);
         if (isNaN(val) || val < 0 || val >= raffle.total_numbers) {
           toast.error(`Ingresá un número válido para "${prize.title}"`);
           return;
         }
+        const subs = (prizeSubstitutes[prize.id] ?? []);
+        for (let si = 0; si < substituteCount; si++) {
+          const sv = parseInt(subs[si] ?? '', 10);
+          if (isNaN(sv) || sv < 0 || sv >= raffle.total_numbers) {
+            toast.error(`Ingresá un suplente ${si + 1} válido para "${prize.title}"`);
+            return;
+          }
+        }
       }
-      try {
-        // Assign winner to each prize
+
+      // Repeat-buyer validation
+      if (!allowRepeatManual && sortedPrizes.length > 1) {
+        const usedBuyers = new Map<string, string>(); // buyer → prize title
         for (const prize of sortedPrizes) {
+          const winNum = parseInt(prizeWinners[prize.id] ?? '', 10);
+          const buyer = buyerMap.get(winNum);
+          if (buyer) {
+            if (usedBuyers.has(buyer)) {
+              toast.error(`El comprador "${buyer}" ya ganó en "${usedBuyers.get(buyer)}". Activá "permitir repetición" o cambiá el número.`);
+              return;
+            }
+            usedBuyers.set(buyer, prize.title);
+          }
+        }
+      }
+
+      try {
+        for (const prize of sortedPrizes) {
+          const subs = (prizeSubstitutes[prize.id] ?? []).slice(0, substituteCount).map((s) => parseInt(s, 10));
           await updatePrize.mutateAsync({
             prizeId: prize.id,
-            data: { winner_number: parseInt(prizeWinners[prize.id], 10) },
+            data: { winner_number: parseInt(prizeWinners[prize.id], 10), substitute_numbers: subs },
           });
         }
-        // Finish raffle using the 1st prize winner as the overall winner
-        const overallWinner = parseInt(prizeWinners[sortedPrizes[0].id], 10);
+        const overallWinner = parseInt(prizeWinners[sortedPrizes[0]!.id], 10);
         await api.post(`/api/raffles/${id}/finish`, { winner_number: overallWinner });
         toast.success('¡Rifa finalizada!');
         router.push('/dashboard/raffles');
@@ -979,8 +1063,11 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                       key={n.number}
                       id={`admin-num-${n.number}`}
                       title={n.buyer_name ? `${n.buyer_name}${isReserved ? ' (reservado)' : ''}` : undefined}
-                      onClick={() => toggleAdminNumber(n.number)}
+                      disabled={raffle.status === 'finished'}
+                      onClick={() => raffle.status !== 'finished' && toggleAdminNumber(n.number)}
                       className={`flex items-center justify-center rounded-lg text-xl font-semibold w-full aspect-square min-h-[44px] transition-all ${
+                        raffle.status === 'finished' ? 'cursor-default' : ''
+                      } ${
                         isHighlighted
                           ? 'ring-2 ring-white ring-offset-1 ring-offset-zinc-950 scale-110 z-10'
                           : ''
@@ -1259,85 +1346,440 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* ── Tab: Finalizar ── */}
-      {tab === 'finish' && (
-        <div className="space-y-4">
-          {raffle.status === 'finished' ? (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center space-y-3">
-              <p className="text-4xl">🏆</p>
-              <p className="font-semibold text-zinc-100 text-lg">Rifa finalizada</p>
-              {prizes.length > 0 ? (
-                <div className="space-y-2 text-left mt-2">
-                  {[...prizes].sort((a, b) => a.position - b.position).map((prize, idx) => (
-                    <div key={prize.id} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2">
-                      <span className="text-sm text-zinc-400">
-                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}°`} {prize.title}
-                      </span>
-                      {prize.winner_number !== null ? (
-                        <span className="text-yellow-400 font-bold">#{prize.winner_number}</span>
-                      ) : (
-                        <span className="text-zinc-600 text-xs">Sin ganador</span>
+      {tab === 'finish' && (() => {
+        const soldCount = (numbersData?.numbers ?? []).filter((n) => n.status === 'sold').length;
+        const dp = drawPaymentData;
+        const drawUnlocked = dp?.draw_unlocked ?? raffle.draw_unlocked;
+        const drawPayment = dp?.payment ?? null;
+
+        // ── Rifa ya finalizada ──
+        if (raffle.status === 'finished') {
+          return (
+            <div className="space-y-4">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center space-y-3">
+                <p className="text-4xl">🏆</p>
+                <p className="font-semibold text-zinc-100 text-lg">Rifa finalizada</p>
+                {prizes.length > 0 ? (
+                  <div className="space-y-2 text-left mt-2">
+                    {[...prizes].sort((a, b) => a.position - b.position).map((prize, idx) => (
+                      <div key={prize.id} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2">
+                        <span className="text-sm text-zinc-400">
+                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}°`} {prize.title}
+                        </span>
+                        {prize.winner_number !== null ? (
+                          <span className="text-yellow-400 font-bold">#{prize.winner_number}</span>
+                        ) : (
+                          <span className="text-zinc-600 text-xs">Sin ganador</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : raffle.winner_number !== null ? (
+                  <p className="text-zinc-400">Número ganador: <strong className="text-yellow-400">#{raffle.winner_number}</strong></p>
+                ) : (
+                  <p className="text-zinc-500 text-sm">Cerrada sin ganadores.</p>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        // ── Selector de modo ──
+        if (!finishMode) {
+          return (
+            <div className="space-y-3">
+              <p className="text-sm text-zinc-400">¿Cómo querés finalizar esta rifa?</p>
+              <button
+                onClick={() => setFinishMode('manual')}
+                className="w-full text-left bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 transition-colors space-y-1"
+              >
+                <p className="font-semibold text-zinc-100">✏️ Cargar ganadores manualmente</p>
+                <p className="text-xs text-zinc-500">Ingresás el número ganador para cada premio.</p>
+              </button>
+              <button
+                onClick={() => setFinishMode('draw')}
+                className="w-full text-left bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 transition-colors space-y-1"
+              >
+                <p className="font-semibold text-zinc-100 flex items-center gap-2"><Shuffle className="h-4 w-4 text-violet-400 inline" /> Sortear en la app</p>
+                <p className="text-xs text-zinc-500">El sistema elige los ganadores al azar. Requiere pago del servicio.</p>
+              </button>
+              <button
+                onClick={() => setFinishMode('close')}
+                className="w-full text-left bg-zinc-900 border border-zinc-800 hover:border-red-800/50 rounded-xl p-4 transition-colors space-y-1"
+              >
+                <p className="font-semibold text-zinc-400">🔒 Cerrar rifa sin ganadores</p>
+                <p className="text-xs text-zinc-500">Cierra la rifa sin asignar ningún ganador.</p>
+              </button>
+            </div>
+          );
+        }
+
+        // ── Modo: Manual ──
+        if (finishMode === 'manual') {
+          const sortedPrizesManual = [...prizes].sort((a, b) => a.position - b.position);
+          const buyerByNum = new Map<number, string>(
+            (numbersData?.numbers ?? [])
+              .filter((n) => n.buyer_name)
+              .map((n) => [n.number, n.buyer_name!])
+          );
+          const getBuyer = (val: string) => {
+            const n = parseInt(val, 10);
+            if (isNaN(n)) return null;
+            return buyerByNum.get(n) ?? null;
+          };
+
+          return (
+            <div className="space-y-4">
+              <button onClick={() => setFinishMode(null)} className="text-sm text-zinc-500 hover:text-zinc-300 flex items-center gap-1">
+                ← Volver
+              </button>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5">
+                <div>
+                  <h2 className="font-semibold text-zinc-100">Cargar ganadores manualmente</h2>
+                  <p className="text-sm text-zinc-400 mt-0.5">
+                    {sortedPrizesManual.length > 0
+                      ? 'Ingresá el número ganador para cada premio. Esta acción no se puede deshacer.'
+                      : 'Ingresá el número ganador para cerrar la rifa. Esta acción no se puede deshacer.'}
+                  </p>
+                </div>
+
+                {sortedPrizesManual.length > 0 && (
+                  <>
+                    {/* Opciones globales */}
+                    <div className="space-y-3">
+                      {/* Toggle: permitir comprador repetido */}
+                      <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3">
+                        <div>
+                          <p className="text-sm text-zinc-200">Permitir comprador repetido</p>
+                          <p className="text-xs text-zinc-500 mt-0.5">Una misma persona puede ganar más de un premio.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAllowRepeatManual((v) => !v)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+                            allowRepeatManual ? 'bg-violet-600' : 'bg-zinc-700'
+                          }`}
+                        >
+                          <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${allowRepeatManual ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
+
+                      {/* Selector: cantidad de suplentes */}
+                      <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3">
+                        <div>
+                          <p className="text-sm text-zinc-200">Suplentes por premio</p>
+                          <p className="text-xs text-zinc-500 mt-0.5">Números de reserva si el ganador no puede recibir el premio.</p>
+                        </div>
+                        <select
+                          value={substituteCount}
+                          onChange={(e) => setSubstituteCount(Number(e.target.value))}
+                          className="rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        >
+                          {[0, 1, 2, 3, 4, 5].map((n) => (
+                            <option key={n} value={n}>{n === 0 ? 'Sin suplentes' : `${n} suplente${n !== 1 ? 's' : ''}`}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Inputs por premio */}
+                    <div className="space-y-4">
+                      {sortedPrizesManual.map((prize, idx) => {
+                        const winnerVal = prizeWinners[prize.id] ?? '';
+                        const winnerBuyer = getBuyer(winnerVal);
+                        const subs = prizeSubstitutes[prize.id] ?? [];
+
+                        return (
+                          <div key={prize.id} className="space-y-2 bg-zinc-950 border border-zinc-800 rounded-xl p-4">
+                            <p className="text-sm font-medium text-zinc-300 flex items-center gap-1.5">
+                              <span>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}°`}</span>
+                              <span>{prize.title}</span>
+                            </p>
+
+                            {/* Ganador principal */}
+                            <div className="space-y-1">
+                              <label className="text-xs text-zinc-500">Ganador</label>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  value={winnerVal}
+                                  onChange={(e) => setPrizeWinners((prev) => ({ ...prev, [prize.id]: e.target.value }))}
+                                  placeholder={`Número (0–${raffle.total_numbers - 1})`}
+                                  className="bg-zinc-900 border-zinc-700 flex-1"
+                                  min={0}
+                                  max={raffle.total_numbers - 1}
+                                />
+                                {winnerBuyer && (
+                                  <span className="text-xs text-green-400 bg-green-950/40 border border-green-700/40 rounded-lg px-2 py-1.5 shrink-0 whitespace-nowrap">
+                                    {winnerBuyer}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Suplentes */}
+                            {substituteCount > 0 && Array.from({ length: substituteCount }).map((_, si) => {
+                              const subVal = subs[si] ?? '';
+                              const subBuyer = getBuyer(subVal);
+                              return (
+                                <div key={si} className="space-y-1">
+                                  <label className="text-xs text-zinc-500">Suplente {si + 1}</label>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      type="number"
+                                      value={subVal}
+                                      onChange={(e) => {
+                                        const newSubs = [...(prizeSubstitutes[prize.id] ?? [])];
+                                        newSubs[si] = e.target.value;
+                                        setPrizeSubstitutes((prev) => ({ ...prev, [prize.id]: newSubs }));
+                                      }}
+                                      placeholder={`Número (0–${raffle.total_numbers - 1})`}
+                                      className="bg-zinc-900 border-zinc-700 flex-1"
+                                      min={0}
+                                      max={raffle.total_numbers - 1}
+                                    />
+                                    {subBuyer && (
+                                      <span className="text-xs text-zinc-400 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 shrink-0 whitespace-nowrap">
+                                        {subBuyer}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {sortedPrizesManual.length === 0 && (
+                  <Input
+                    type="number"
+                    value={winnerNumber}
+                    onChange={(e) => setWinnerNumber(e.target.value)}
+                    placeholder={`0 – ${raffle.total_numbers - 1}`}
+                    className="bg-zinc-950 border-zinc-700"
+                    min={0}
+                    max={raffle.total_numbers - 1}
+                  />
+                )}
+
+                <Button
+                  onClick={handleFinish}
+                  className="bg-yellow-600 hover:bg-yellow-500 text-white w-full"
+                  disabled={updatePrize.isPending}
+                >
+                  🏆 {updatePrize.isPending ? 'Guardando ganadores...' : 'Finalizar rifa'}
+                </Button>
+              </div>
+            </div>
+          );
+        }
+
+        // ── Modo: Sortear en la app ──
+        if (finishMode === 'draw') {
+          return (
+            <div className="space-y-4">
+              <button onClick={() => { setFinishMode(null); setDrawWinners(null); }} className="text-sm text-zinc-500 hover:text-zinc-300 flex items-center gap-1">
+                ← Volver
+              </button>
+
+              {/* Resultado del sorteo */}
+              {drawWinners && (
+                <div className="bg-zinc-900 border border-violet-500/30 rounded-xl p-5 space-y-3">
+                  <p className="font-semibold text-zinc-100 flex items-center gap-2"><Shuffle className="h-4 w-4 text-violet-400" /> Resultado del sorteo</p>
+                  {prizes.length > 0 ? (
+                    <div className="space-y-2">
+                      {[...prizes].sort((a, b) => a.position - b.position).map((prize, idx) => (
+                        <div key={prize.id} className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2">
+                          <span className="text-sm text-zinc-300">
+                            {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}°`} {prize.title}
+                          </span>
+                          <span className="text-yellow-400 font-bold text-lg">#{drawWinners[idx]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center text-2xl font-bold text-yellow-400">#{drawWinners[0]}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Estado del sorteo: no habilitado */}
+              {!drawUnlocked && !drawWinners && (() => {
+                if (drawPayment?.status === 'pending') {
+                  return (
+                    <div className="bg-zinc-900 border border-amber-700/40 rounded-xl p-6 text-center space-y-3">
+                      <p className="text-3xl">⏳</p>
+                      <p className="font-semibold text-zinc-100">Comprobante en revisión</p>
+                      <p className="text-sm text-zinc-400">Te habilitaremos el sorteo una vez que verifiquemos el pago.</p>
+                      {drawPayment.comprobante_url && (
+                        <a href={drawPayment.comprobante_url} target="_blank" rel="noopener noreferrer" className="inline-block text-xs text-violet-400 underline mt-1">
+                          Ver comprobante enviado
+                        </a>
                       )}
                     </div>
-                  ))}
-                </div>
-              ) : raffle.winner_number !== null && (
-                <p className="text-zinc-400">Número ganador: <strong className="text-yellow-400">#{raffle.winner_number}</strong></p>
-              )}
-            </div>
-          ) : (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5">
-              <div>
-                <h2 className="font-semibold text-zinc-100">Finalizar rifa</h2>
-                <p className="text-sm text-zinc-400 mt-0.5">
-                  {prizes.length > 0
-                    ? 'Ingresá el número ganador para cada premio. Esta acción no se puede deshacer.'
-                    : 'Ingresá el número ganador para cerrar la rifa. Esta acción no se puede deshacer.'}
-                </p>
-              </div>
-
-              {prizes.length > 0 ? (
-                <div className="space-y-3">
-                  {[...prizes].sort((a, b) => a.position - b.position).map((prize, idx) => (
-                    <div key={prize.id} className="space-y-1.5">
-                      <label className="text-sm text-zinc-300 flex items-center gap-1.5">
-                        <span>{idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}°`}</span>
-                        <span className="font-medium">{prize.title}</span>
-                      </label>
-                      <Input
-                        type="number"
-                        value={prizeWinners[prize.id] ?? ''}
-                        onChange={(e) => setPrizeWinners((prev) => ({ ...prev, [prize.id]: e.target.value }))}
-                        placeholder={`Número ganador (0 – ${raffle.total_numbers - 1})`}
-                        className="bg-zinc-950 border-zinc-700"
-                        min={0}
-                        max={raffle.total_numbers - 1}
-                      />
+                  );
+                }
+                return (
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+                    {drawPayment?.status === 'rejected' && (
+                      <div className="flex items-start gap-2 bg-red-950/30 border border-red-700/40 rounded-lg px-3 py-2 text-sm text-red-300">
+                        <span className="shrink-0">✗</span>
+                        Tu comprobante anterior fue rechazado. Podés enviar uno nuevo.
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-semibold text-zinc-100">Habilitá el sorteo automático</p>
+                      <p className="text-sm text-zinc-400 mt-1">
+                        Envianos el comprobante de pago del servicio. Una vez verificado, podrás sortear desde acá.
+                      </p>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <Input
-                  type="number"
-                  value={winnerNumber}
-                  onChange={(e) => setWinnerNumber(e.target.value)}
-                  placeholder={`0 – ${raffle.total_numbers - 1}`}
-                  className="bg-zinc-950 border-zinc-700"
-                  min={0}
-                  max={raffle.total_numbers - 1}
-                />
-              )}
+                    {drawComprobantePreview ? (
+                      <div className="relative w-full max-w-xs mx-auto">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={drawComprobantePreview} alt="Comprobante" className="w-full rounded-lg object-contain bg-zinc-800 max-h-64" />
+                        <button type="button" onClick={() => setDrawComprobantePreview(undefined)} className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center h-24 border border-dashed border-zinc-600 rounded-xl cursor-pointer hover:border-violet-500 transition-colors">
+                        <ImagePlus className="h-5 w-5 text-zinc-500" />
+                        <span className="text-sm text-zinc-500 mt-1.5">Adjuntar comprobante</span>
+                        <span className="text-xs text-zinc-600 mt-0.5">JPG, PNG o WebP · máx 5 MB</span>
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) { toast.error('Formato no permitido.'); return; }
+                          if (f.size > 5 * 1024 * 1024) { toast.error('Máximo 5 MB.'); return; }
+                          setDrawComprobantePreview(await toBase64(f));
+                        }} />
+                      </label>
+                    )}
+                    <Button onClick={handleSubmitComprobante} className="w-full bg-violet-600 hover:bg-violet-500" disabled={!drawComprobantePreview || submitDrawPayment.isPending}>
+                      {submitDrawPayment.isPending ? 'Enviando...' : 'Enviar comprobante'}
+                    </Button>
+                  </div>
+                );
+              })()}
 
-              <Button
-                onClick={handleFinish}
-                className="bg-yellow-600 hover:bg-yellow-500 text-white w-full"
-                disabled={updatePrize.isPending}
-              >
-                🏆 {updatePrize.isPending ? 'Guardando ganadores...' : 'Finalizar rifa'}
-              </Button>
+              {/* Sorteo habilitado */}
+              {drawUnlocked && !drawWinners && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-5">
+                  <div className="flex items-start gap-2 bg-green-950/30 border border-green-700/40 rounded-lg px-3 py-2 text-sm text-green-300">
+                    <span className="shrink-0">✅</span>
+                    Sorteo automático habilitado.
+                  </div>
+
+                  {/* Pool */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-zinc-300">Pool de números</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(
+                        [
+                          { value: 'sold' as const, label: 'Solo vendidos', extra: `${soldCount} número${soldCount !== 1 ? 's' : ''}` },
+                          { value: 'all' as const, label: 'Todos', extra: `${raffle.total_numbers} número${raffle.total_numbers !== 1 ? 's' : ''}` },
+                        ]
+                      ).map(({ value, label, extra }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setDrawMode(value)}
+                          className={`text-left p-3 rounded-xl border transition-colors ${
+                            drawMode === value ? 'border-violet-500 bg-violet-600/10' : 'border-zinc-700 bg-zinc-950 hover:border-zinc-500'
+                          }`}
+                        >
+                          <p className={`text-sm font-medium ${drawMode === value ? 'text-violet-300' : 'text-zinc-200'}`}>{label}</p>
+                          <p className="text-xs text-zinc-500 mt-0.5">{extra}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Repetición */}
+                  <div className="flex items-center justify-between bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3">
+                    <div>
+                      <p className="text-sm text-zinc-200">Permitir comprador repetido</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Una misma persona puede ganar más de un premio.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAllowRepeat((v) => !v)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+                        allowRepeat ? 'bg-violet-600' : 'bg-zinc-700'
+                      }`}
+                    >
+                      <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${allowRepeat ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-zinc-500 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2">
+                    Se sortearán <strong className="text-zinc-300">{prizes.length || 1} ganador{(prizes.length || 1) !== 1 ? 'es' : ''}</strong>
+                    {prizes.length > 0 && ', uno por cada premio'}
+                    {!allowRepeat && prizes.length > 1 && ' (sin repetición de comprador)'}.
+                  </div>
+
+                  <Button
+                    onClick={handleExecuteDraw}
+                    className="w-full bg-violet-600 hover:bg-violet-500 text-white"
+                    disabled={drawAnimating || executeDraw.isPending}
+                  >
+                    <Shuffle className="h-4 w-4 mr-2" />
+                    {drawAnimating ? 'Sorteando...' : '¡Sortear ahora!'}
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          );
+        }
+
+        // ── Modo: Cerrar sin ganadores ──
+        if (finishMode === 'close') {
+          return (
+            <div className="space-y-4">
+              <button onClick={() => { setFinishMode(null); setCloseConfirmText(''); }} className="text-sm text-zinc-500 hover:text-zinc-300 flex items-center gap-1">
+                ← Volver
+              </button>
+              <div className="bg-zinc-900 border border-red-800/40 rounded-xl p-6 space-y-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl shrink-0">⚠️</span>
+                  <div>
+                    <p className="font-semibold text-zinc-100">Cerrar rifa sin ganadores</p>
+                    <p className="text-sm text-zinc-400 mt-1">
+                      Esta acción no se puede deshacer. La rifa quedará cerrada y no se podrá reactivar.
+                      Ningún número será declarado ganador.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-500">
+                    Escribí el nombre de la rifa para confirmar: <strong className="text-zinc-300">{raffle.title}</strong>
+                  </label>
+                  <Input
+                    value={closeConfirmText}
+                    onChange={(e) => setCloseConfirmText(e.target.value)}
+                    placeholder={raffle.title}
+                    className="bg-zinc-950 border-zinc-700"
+                  />
+                </div>
+                <Button
+                  onClick={handleCloseWithoutWinners}
+                  variant="destructive"
+                  className="w-full"
+                  disabled={closeConfirmText.trim() !== raffle.title}
+                >
+                  Confirmar cierre sin ganadores
+                </Button>
+              </div>
+            </div>
+          );
+        }
+
+        return null;
+      })()}
 
       {/* ── Admin sticky bottom bar (números tab) ── */}
       {tab === 'numbers' && adminSelected.size > 0 && (

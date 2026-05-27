@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Ticket, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Ticket, Settings, LogOut, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -72,6 +72,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {label}
           </Link>
         ))}
+
+        {user.is_admin && (
+          <Link
+            href="/dashboard/admin"
+            className={cn(
+              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+              pathname === '/dashboard/admin'
+                ? 'bg-violet-600/20 text-violet-400'
+                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+            )}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Admin
+          </Link>
+        )}
 
         <div className="mt-auto">
           <div className="px-3 py-2 text-xs text-zinc-500 truncate">{user.email}</div>

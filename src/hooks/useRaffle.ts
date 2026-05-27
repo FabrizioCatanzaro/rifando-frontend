@@ -1,7 +1,7 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Raffle, Prize, Promotion, PublicRaffleData } from '@/types';
+import type { Raffle, Prize, Promotion, PublicRaffleData, DrawPayment, AdminDrawPayment } from '@/types';
 
 export function useMyRaffles() {
   return useQuery({
@@ -107,5 +107,60 @@ export function useDeletePromotion(raffleId: string) {
   return useMutation({
     mutationFn: (promoId: string) => api.delete(`/api/raffles/${raffleId}/promotions/${promoId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['promotions', raffleId] }),
+  });
+}
+
+export function useDrawPayment(raffleId: string) {
+  return useQuery({
+    queryKey: ['draw-payment', raffleId],
+    queryFn: () => api.get<{ draw_unlocked: boolean; payment: DrawPayment | null }>(`/api/raffles/${raffleId}/draw-payment`),
+    enabled: !!raffleId,
+  });
+}
+
+export function useSubmitDrawPayment(raffleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (comprobante_url: string) =>
+      api.post<{ payment: DrawPayment }>(`/api/raffles/${raffleId}/draw-payment`, { comprobante_url }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['draw-payment', raffleId] });
+      qc.invalidateQueries({ queryKey: ['raffles', 'mine'] });
+    },
+  });
+}
+
+export function useExecuteDraw(raffleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ mode, allow_repeat }: { mode: 'all' | 'sold'; allow_repeat: boolean }) =>
+      api.post<{ raffle: Raffle; winners: number[] }>(`/api/raffles/${raffleId}/draw`, { mode, allow_repeat }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['raffles', 'mine'] });
+      qc.invalidateQueries({ queryKey: ['prizes', raffleId] });
+    },
+  });
+}
+
+export function useAdminDrawPayments() {
+  return useQuery({
+    queryKey: ['admin', 'draw-payments'],
+    queryFn: () => api.get<{ payments: AdminDrawPayment[] }>('/api/admin/draw-payments'),
+  });
+}
+
+export function useApproveDrawPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paymentId: string) => api.patch(`/api/admin/draw-payments/${paymentId}/approve`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'draw-payments'] }),
+  });
+}
+
+export function useRejectDrawPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paymentId: string) => api.patch(`/api/admin/draw-payments/${paymentId}/reject`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'draw-payments'] }),
   });
 }
