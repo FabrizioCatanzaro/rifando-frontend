@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { TelegramCard } from '@/components/settings/TelegramCard';
 import type { User } from '@/types';
 
 const schema = z.object({
@@ -179,6 +180,8 @@ export default function SettingsPage() {
           {isSubmitting ? 'Guardando...' : 'Guardar cambios'}
         </Button>
       </form>
+
+      <TelegramCard />
     </div>
   );
 }
