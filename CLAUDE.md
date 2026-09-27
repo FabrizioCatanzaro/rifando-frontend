@@ -60,7 +60,7 @@ src/
   components/
     ui/                # componentes shadcn (base-nova)
     raffle/            # BuyerSheet, NumberGrid, NumberCell, RaffleCard, RafflePDF, RichText*
-    settings/          # TelegramCard
+    settings/          # TelegramCard, MercadoPagoCard, UsernameField
     layout/, shared/
   hooks/               # useAuth, useRaffle, useNumbers (React Query)
   stores/              # authStore, selectionStore (Zustand)
@@ -114,8 +114,19 @@ src/
 - Comprobantes: miniatura con `comprobanteThumbUrl()` (PDF → JPG de la página 1); el link abre la URL original.
 - `src/app/dashboard/raffles/[id]/page.tsx` tiene ~1900 líneas. Extrae cada solapa nueva a un componente en `src/components/raffle/`.
 - La protección de `/dashboard` es del lado del cliente (`dashboard/layout.tsx`). No hay middleware.
-- `BuyerSheet` resuelve los dos métodos de confirmación: `whatsapp` y `upload`.
+- `BuyerSheet` resuelve los tres métodos de confirmación: `whatsapp`, `upload` y `mercadopago`.
 - `BuyerSheet` copia la selección al abrirse. No la leas en vivo: la grilla se refresca cada 15 s.
 - El menú del dashboard está en el array `NAV` de `src/app/dashboard/layout.tsx`.
 - `/[username]` y `/[username]/[slug]` redirigen si la URL usa un nombre de usuario anterior.
-- "Mis datos": `UsernameField` (cambio de nombre), `TelegramCard` (vinculación) y `maskCuitInput` de `lib/transfer.ts`.
+- "Mis datos": `UsernameField` (cambio de nombre), `TelegramCard` (vinculación), `MercadoPagoCard` (vinculación) y `maskCuitInput` de `lib/transfer.ts`.
+
+## Mercado Pago
+
+- Hooks y llamadas en `hooks/usePayments.ts`. Tipos en `types/index.ts` (`MercadoPago*`).
+- Vinculación: `MercadoPagoCard` pide la URL a la API y redirige. La API vuelve a `/dashboard/settings?mp=linked|error&mp_error=`.
+- Pago: `BuyerSheet` reserva, crea el checkout y redirige a `init_point`. Si falla el checkout, reintenta sin volver a reservar.
+- El `sessionId` cambia en cada carga. Antes de redirigir se guarda la compra con `savePendingCheckout` (`lib/mpCheckout.ts`, localStorage).
+- Retorno: Mercado Pago vuelve a `/[username]/[slug]?mp_purchase=...&payment_id=...`. `MercadoPagoReturn` consulta el estado cada 3 s hasta ~30 s y limpia la URL.
+- `?code=` en la URL abre una rifa privada sin pedir el código.
+- Historial de pagos: `MercadoPagoPayments`, debajo de la solapa "Reservas".
+- El rifante elige el método en "Configuración". `mercadopago` exige cuenta vinculada.
