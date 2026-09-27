@@ -16,12 +16,14 @@ import {
 } from '@/hooks/useRaffle';
 import { useNumbers, useBulkSell, useBulkRelease } from '@/hooks/useNumbers';
 import { useAuthStore } from '@/stores/authStore';
-import { formatCurrency, formatPercent, formatDate } from '@/lib/utils';
+import { formatCurrency, formatPercent, formatDateTime as formatDate, isoToLocalInput, localInputToIso } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
 import { Plus, Trash2, ImagePlus, Lock, Copy, Search, Download, Shuffle } from 'lucide-react';
 import { exportGridAsImage } from '@/lib/exportGrid';
 import { RichTextEditor } from '@/components/raffle/RichTextEditor';
+import { PurchasesTab } from '@/components/raffle/PurchasesTab';
 import type { Prize, Promotion } from '@/types';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const ICONS = ['🔒', '❌', '🎟️', '🏆', '💜', '✅', '🌟'];
 
@@ -42,7 +44,7 @@ function generateCode() {
 }
 
 function todayInputValue() {
-  return new Date().toISOString().slice(0, 16);
+  return isoToLocalInput(new Date().toISOString());
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -74,6 +76,7 @@ interface EditForm {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function RaffleDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { confirm } = useConfirm();
   const { id } = use(params);
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -105,8 +108,6 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   const [infoContent, setInfoContent] = useState<Record<string, unknown> | null>(null);
   const [infoSaving, setInfoSaving] = useState(false);
   const [prizeWinners, setPrizeWinners] = useState<Record<string, string>>({});
-  // Per-reservation editable name (keyed by buyer_name)
-  const [reservationNames, setReservationNames] = useState<Record<string, string>>({});
   const [selectedIcon, setSelectedIcon] = useState('🔒');
   const [winnerNumber, setWinnerNumber] = useState('');
 
@@ -181,7 +182,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
         visibility: raffle.visibility,
         access_code: raffle.access_code ?? '',
         draw_mode: raffle.draw_mode,
-        draw_date: raffle.draw_date ? raffle.draw_date.slice(0, 16) : '',
+        draw_date: isoToLocalInput(raffle.draw_date),
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -211,7 +212,17 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   }
 
   const isPublished = raffle.status !== 'draft';
-  const sold = raffle.stats?.sold ?? 0;
+  // Estadísticas en vivo desde la grilla (se refresca al confirmar o liberar números).
+  const liveNumbers = numbersData?.numbers;
+  const sold = liveNumbers ? liveNumbers.filter((n) => n.status === 'sold').length : (raffle.stats?.sold ?? 0);
+  const reservedCount = liveNumbers
+    ? liveNumbers.filter((n) => n.status === 'reserved').length
+    : (raffle.stats?.reserved ?? 0);
+  const revenue = liveNumbers
+    ? liveNumbers
+        .filter((n) => n.status === 'sold')
+        .reduce((sum, n) => sum + (n.sale_amount ?? raffle.price_per_number), 0)
+    : (raffle.stats?.revenue ?? 0);
   const percent = formatPercent(sold, raffle.total_numbers);
   const publicUrl = `/${user?.username}/${raffle.slug}`;
   const prizes = prizesData?.prizes ?? [];
@@ -220,6 +231,10 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleSaveConfig = handleSubmit(async (data) => {
+    if (needsDate && !data.draw_date) {
+      toast.error('Elegí la fecha límite del sorteo');
+      return;
+    }
     try {
       await updateRaffle.mutateAsync({
         title: data.title,
@@ -229,7 +244,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
         visibility: data.visibility,
         access_code: data.visibility === 'private' ? data.access_code : undefined,
         draw_mode: data.draw_mode,
-        draw_date: needsDate && data.draw_date ? data.draw_date : undefined,
+        draw_date: needsDate && data.draw_date ? localInputToIso(data.draw_date) : undefined,
       } as never);
       toast.success('Cambios guardados');
     } catch (err) {
@@ -247,10 +262,18 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const handleStatusChange = async (status: 'draft' | 'active') => {
+    if (status === 'active' && prizes.length === 0) {
+      toast.error('Cargá al menos un premio para publicar la rifa');
+      setTab('prizes');
+      return;
+    }
     if (status === 'active') {
-      const confirmed = confirm(
-        '¿Publicar esta rifa?\n\nUna vez publicada no podrás modificar el nombre, precio, cantidad de números ni otras opciones principales. Asegurate de que todo esté correcto antes de continuar.'
-      );
+      const confirmed = await confirm({
+        title: '¿Publicar esta rifa?',
+        description:
+          'Una vez publicada no podrás modificar el nombre, precio, cantidad de números ni otras opciones principales. Asegurate de que todo esté correcto antes de continuar.',
+        confirmLabel: 'Publicar',
+      });
       if (!confirmed) return;
     }
     try {
@@ -262,7 +285,13 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const handleDelete = async () => {
-    if (!confirm('¿Eliminar esta rifa? No se puede deshacer.')) return;
+    const ok = await confirm({
+      title: '¿Eliminar esta rifa?',
+      description: 'Se borran los números, premios, compras y compradores. Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await deleteRaffle.mutateAsync(id);
       router.push('/dashboard/raffles');
@@ -284,7 +313,12 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const handleExecuteDraw = async () => {
-    if (!confirm(`¿Confirmar el sorteo? Se sortearán ${prizes.length || 1} ganador(es) entre los números ${drawMode === 'all' ? 'totales' : 'vendidos'}${allowRepeat ? ' (con repetición)' : ''}. Esta acción no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: '¿Confirmar el sorteo?',
+      description: `Se sortearán ${prizes.length || 1} ganador(es) entre los números ${drawMode === 'all' ? 'totales' : 'vendidos'}${allowRepeat ? ' (con repetición)' : ''}. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Sortear',
+    });
+    if (!ok) return;
     setDrawAnimating(true);
     try {
       const result = await executeDraw.mutateAsync({ mode: drawMode, allow_repeat: allowRepeat });
@@ -451,7 +485,8 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const handleDeletePrize = async (prizeId: string) => {
-    if (!confirm('¿Eliminar este premio?')) return;
+    const ok = await confirm({ title: '¿Eliminar este premio?', confirmLabel: 'Eliminar', destructive: true });
+    if (!ok) return;
     try {
       await deletePrize.mutateAsync(prizeId);
       toast.success('Premio eliminado');
@@ -497,7 +532,8 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   };
 
   const handleDeletePromo = async (promoId: string) => {
-    if (!confirm('¿Eliminar esta promoción?')) return;
+    const ok = await confirm({ title: '¿Eliminar esta promoción?', confirmLabel: 'Eliminar', destructive: true });
+    if (!ok) return;
     try {
       await deletePromotion.mutateAsync(promoId);
       toast.success('Promoción eliminada');
@@ -542,11 +578,20 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
 
+      {raffle.status === 'draft' && !prizesLoading && prizes.length === 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-700/40 bg-amber-950/30 px-4 py-3 text-sm text-amber-300">
+          <span>Para publicar la rifa necesitás cargar al menos un premio.</span>
+          <Button size="sm" variant="outline" className="border-amber-700/60 text-amber-300 shrink-0" onClick={() => setTab('prizes')}>
+            Cargar premio
+          </Button>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 grid grid-cols-3 gap-4">
         <div><p className="text-xs text-zinc-500">Vendidos</p><p className="text-xl font-bold text-zinc-50">{sold}</p></div>
-        <div><p className="text-xs text-zinc-500">Reservados</p><p className="text-xl font-bold text-zinc-50">{raffle.stats?.reserved ?? 0}</p></div>
-        <div><p className="text-xs text-zinc-500">Recaudado</p><p className="text-xl font-bold text-zinc-50">{formatCurrency(sold * raffle.price_per_number)}</p></div>
+        <div><p className="text-xs text-zinc-500">Reservados</p><p className="text-xl font-bold text-zinc-50">{reservedCount}</p></div>
+        <div><p className="text-xs text-zinc-500">Recaudado</p><p className="text-xl font-bold text-zinc-50">{formatCurrency(revenue)}</p></div>
         <div className="col-span-3">
           <div className="flex justify-between text-xs text-zinc-500 mb-1">
             <span>{percent}% vendido</span>
@@ -559,7 +604,8 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-zinc-800 gap-1 overflow-x-auto">
+      {/* Solapas: scroll horizontal sin barra visible en pantallas angostas. */}
+      <div className="flex border-b border-zinc-800 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {([
           { key: 'edit', label: 'Configuración' },
           { key: 'prizes', label: `Premios${prizes.length > 0 ? ` (${prizes.length})` : ''}` },
@@ -571,8 +617,11 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
         ] as const).map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+            onClick={(e) => {
+              setTab(key);
+              e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+            }}
+            className={`px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors shrink-0 ${
               tab === key ? 'border-violet-500 text-violet-400' : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >
@@ -990,15 +1039,15 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
               <Input
                 type="number"
-                min={1}
-                max={raffle.total_numbers}
-                placeholder={`Buscar número (1–${raffle.total_numbers})`}
+                min={0}
+                max={raffle.total_numbers - 1}
+                placeholder={`Buscar número (0–${raffle.total_numbers - 1})`}
                 value={adminSearchNum}
                 onChange={(e) => {
                   const val = e.target.value;
                   setAdminSearchNum(val);
                   const n = parseInt(val, 10);
-                  if (!isNaN(n) && n >= 1 && n <= raffle.total_numbers) {
+                  if (!isNaN(n) && n >= 0 && n < raffle.total_numbers) {
                     setAdminHighlighted(n);
                     setAdminGridFilter('all');
                     setTimeout(() => {
@@ -1097,120 +1146,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* ── Tab: Reservas ── */}
-      {tab === 'reservations' && (() => {
-        const reserved = (numbersData?.numbers ?? []).filter((n) => n.status === 'reserved');
-
-        // Group by buyer_name (fall back to "Sin nombre" for anonymous reservations)
-        const grouped = reserved.reduce<Record<string, typeof reserved>>((acc, n) => {
-          const key = n.buyer_name ?? '—';
-          if (!acc[key]) acc[key] = [];
-          acc[key].push(n);
-          return acc;
-        }, {});
-
-        const entries = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
-
-        const handleAccept = async (originalName: string, nums: typeof reserved) => {
-          const name = reservationNames[originalName] ?? originalName;
-          if (!name.trim() || name === '—') return;
-          try {
-            await bulkSell.mutateAsync({ numbers: nums.map((n) => n.number), buyer_name: name.trim() });
-            toast.success(`${nums.length} número${nums.length !== 1 ? 's' : ''} marcados como vendidos`);
-          } catch {
-            toast.error('Error al aceptar la reserva');
-          }
-        };
-
-        const handleReject = async (nums: typeof reserved) => {
-          if (!confirm(`¿Liberar ${nums.length} número${nums.length !== 1 ? 's' : ''}?`)) return;
-          try {
-            await bulkRelease.mutateAsync({ numbers: nums.map((n) => n.number) });
-            toast.success('Reserva liberada');
-          } catch {
-            toast.error('Error al liberar');
-          }
-        };
-
-        return (
-          <div className="space-y-3">
-            {entries.length === 0 ? (
-              <div className="text-center py-16 text-zinc-500">
-                <p className="text-3xl mb-3">⏳</p>
-                <p>No hay reservas pendientes.</p>
-                <p className="text-xs mt-1">Las reservas expiran a los 30 minutos si el comprador no confirma por WhatsApp.</p>
-              </div>
-            ) : (
-              <>
-                <p className="text-xs text-zinc-500">
-                  Las reservas expiran automáticamente a los 30 minutos. Aceptalas para confirmarlas como ventas.
-                </p>
-                {entries.map(([buyerName, nums]) => {
-                  const editedName = reservationNames[buyerName] ?? buyerName;
-                  const isAnonymous = buyerName === '—';
-                  const total = nums.length * raffle.price_per_number;
-                  return (
-                    <div key={buyerName} className="bg-zinc-900 border border-amber-700/30 rounded-xl p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs text-zinc-500 mb-1">Comprador</p>
-                          <Input
-                            value={isAnonymous ? '' : editedName}
-                            onChange={(e) =>
-                              setReservationNames((prev) => ({ ...prev, [buyerName]: e.target.value }))
-                            }
-                            placeholder={isAnonymous ? 'Sin nombre (reserva anónima)' : buyerName}
-                            className="bg-zinc-950 border-zinc-700 h-8 text-sm"
-                          />
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-xs text-zinc-500">Total</p>
-                          <p className="font-semibold text-zinc-100">{formatCurrency(total)}</p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-zinc-500 mb-1.5">
-                          {nums.length} número{nums.length !== 1 ? 's' : ''} reservado{nums.length !== 1 ? 's' : ''}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {nums.sort((a, b) => a.number - b.number).map((n) => (
-                            <span
-                              key={n.number}
-                              className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-xs font-semibold bg-amber-950/40 border border-amber-700/50 text-amber-400"
-                            >
-                              {n.number}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 pt-1">
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-500 flex-1"
-                          onClick={() => handleAccept(buyerName, nums)}
-                          disabled={isAnonymous && !reservationNames[buyerName]?.trim() || bulkSell.isPending}
-                        >
-                          ✅ Aceptar y marcar como vendidos
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-zinc-700 text-zinc-400"
-                          onClick={() => handleReject(nums)}
-                          disabled={bulkRelease.isPending}
-                        >
-                          🗑 Rechazar
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
-            )}
-          </div>
-        );
-      })()}
+      {tab === 'reservations' && <PurchasesTab raffleId={id} />}
 
       {/* ── Tab: Compradores ── */}
       {tab === 'buyers' && (() => {
@@ -1283,7 +1219,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
               </div>
             ) : (
               entries.map(([buyerName, nums]) => {
-                const total = nums.length * raffle.price_per_number;
+                const total = nums.reduce((sum, n) => sum + (n.sale_amount ?? raffle.price_per_number), 0);
                 return (
                   <div key={buyerName} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
                     <div className="flex items-start justify-between gap-3">
@@ -1351,6 +1287,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
         const dp = drawPaymentData;
         const drawUnlocked = dp?.draw_unlocked ?? raffle.draw_unlocked;
         const drawPayment = dp?.payment ?? null;
+        const drawService = dp?.service ?? null;
 
         // ── Rifa ya finalizada ──
         if (raffle.status === 'finished') {
@@ -1401,7 +1338,14 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                 className="w-full text-left bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl p-4 transition-colors space-y-1"
               >
                 <p className="font-semibold text-zinc-100 flex items-center gap-2"><Shuffle className="h-4 w-4 text-violet-400 inline" /> Sortear en la app</p>
-                <p className="text-xs text-zinc-500">El sistema elige los ganadores al azar. Requiere pago del servicio.</p>
+                <p className="text-xs text-zinc-500">
+                  El sistema elige los ganadores al azar.{' '}
+                  {drawUnlocked
+                    ? 'Ya está habilitado para esta rifa.'
+                    : drawService
+                      ? `Requiere un pago único de ${formatCurrency(drawService.price)}.`
+                      : 'Requiere pago del servicio.'}
+                </p>
               </button>
               <button
                 onClick={() => setFinishMode('close')}
@@ -1634,13 +1578,56 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                     <div>
                       <p className="font-semibold text-zinc-100">Habilitá el sorteo automático</p>
                       <p className="text-sm text-zinc-400 mt-1">
-                        Envianos el comprobante de pago del servicio. Una vez verificado, podrás sortear desde acá.
+                        Transferí el pago del servicio y envianos el comprobante. Una vez verificado, podrás sortear desde acá.
                       </p>
                     </div>
+                    {drawService ? (
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-950 p-3 space-y-1.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Precio</span>
+                          <span className="font-semibold text-zinc-100">{formatCurrency(drawService.price)}</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-2">
+                          <span className="text-zinc-500 shrink-0">Alias o CBU/CVU</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(drawService.alias);
+                              toast.success('Copiado');
+                            }}
+                            className="flex items-center gap-1.5 font-mono text-zinc-100 hover:text-violet-300"
+                            title="Copiar"
+                          >
+                            {drawService.alias}
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        {drawService.holder && (
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Titular</span>
+                            <span className="text-zinc-100">{drawService.holder}</span>
+                          </div>
+                        )}
+                        {drawService.bank && (
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Banco</span>
+                            <span className="text-zinc-100">{drawService.bank}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-400">
+                        Los datos de pago no están disponibles. Escribinos desde la página de contacto.
+                      </p>
+                    )}
                     {drawComprobantePreview ? (
                       <div className="relative w-full max-w-xs mx-auto">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={drawComprobantePreview} alt="Comprobante" className="w-full rounded-lg object-contain bg-zinc-800 max-h-64" />
+                        {drawComprobantePreview.startsWith('data:application/pdf') ? (
+                          <div className="flex items-center justify-center gap-2 h-24 rounded-lg bg-zinc-800 text-sm text-zinc-300">📄 PDF adjunto</div>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={drawComprobantePreview} alt="Comprobante" className="w-full rounded-lg object-contain bg-zinc-800 max-h-64" />
+                        )}
                         <button type="button" onClick={() => setDrawComprobantePreview(undefined)} className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1">
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -1649,11 +1636,11 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                       <label className="flex flex-col items-center justify-center h-24 border border-dashed border-zinc-600 rounded-xl cursor-pointer hover:border-violet-500 transition-colors">
                         <ImagePlus className="h-5 w-5 text-zinc-500" />
                         <span className="text-sm text-zinc-500 mt-1.5">Adjuntar comprobante</span>
-                        <span className="text-xs text-zinc-600 mt-0.5">JPG, PNG o WebP · máx 5 MB</span>
-                        <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={async (e) => {
+                        <span className="text-xs text-zinc-600 mt-0.5">JPG, PNG, WebP o PDF · máx 5 MB</span>
+                        <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" onChange={async (e) => {
                           const f = e.target.files?.[0];
                           if (!f) return;
-                          if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) { toast.error('Formato no permitido.'); return; }
+                          if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(f.type)) { toast.error('Formato no permitido.'); return; }
                           if (f.size > 5 * 1024 * 1024) { toast.error('Máximo 5 MB.'); return; }
                           setDrawComprobantePreview(await toBase64(f));
                         }} />

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCreateRaffle } from '@/hooks/useRaffle';
 import { ApiError, api } from '@/lib/api';
+import { isoToLocalInput, localInputToIso } from '@/lib/utils';
 import { Copy, Check, Plus, Trash2, ImagePlus, Info } from 'lucide-react';
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -19,8 +20,7 @@ function generateCode(): string {
 }
 
 function todayInputValue(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 16);
+  return isoToLocalInput(new Date().toISOString());
 }
 
 function toBase64(file: File): Promise<string> {
@@ -96,6 +96,13 @@ const schema = z.object({
       })
     )
     .optional(),
+}).superRefine((data, ctx) => {
+  if (data.draw_mode === 'all_sold') return;
+  if (!data.draw_date) {
+    ctx.addIssue({ code: 'custom', path: ['draw_date'], message: 'Elegí la fecha límite del sorteo' });
+  } else if (new Date(data.draw_date).getTime() <= Date.now()) {
+    ctx.addIssue({ code: 'custom', path: ['draw_date'], message: 'La fecha tiene que ser futura' });
+  }
 });
 
 const ICONS = ['🔒', '❌', '🎟️', '🏆', '💜', '✅', '🌟'];
@@ -205,7 +212,7 @@ export default function NewRafflePage() {
         access_code: data.visibility === 'private' ? data.access_code : undefined,
         cover_icon: data.cover_icon,
         draw_mode: data.draw_mode,
-        draw_date: needsDate && data.draw_date ? data.draw_date : undefined,
+        draw_date: needsDate && data.draw_date ? localInputToIso(data.draw_date) : undefined,
       } as never);
 
       const raffleId = res.raffle.id;
@@ -472,7 +479,7 @@ export default function NewRafflePage() {
 
           {prizeFields.length === 0 && (
             <p className="text-xs text-zinc-500 text-center -mt-2">
-              Podés agregar los premios ahora o más adelante desde el panel de la rifa.
+              Necesitás al menos un premio para publicar. Podés agregarlo ahora o desde el panel de la rifa.
             </p>
           )}
         </Section>
@@ -564,7 +571,7 @@ export default function NewRafflePage() {
         <div className="flex gap-3 items-start bg-violet-950/30 border border-violet-800/40 rounded-xl px-4 py-3">
           <Info className="h-4 w-4 text-violet-400 mt-0.5 shrink-0" />
           <p className="text-sm text-violet-300">
-            La rifa se creará en <strong>modo borrador</strong>. Una vez que revisés todo, podés publicarla desde el panel de administración.
+            La rifa se creará en <strong>modo borrador</strong>. Para publicarla necesitás al menos un premio.
           </p>
         </div>
 
