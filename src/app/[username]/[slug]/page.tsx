@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { formatCurrency, formatPercent, formatDate } from '@/lib/utils';
+import { formatCurrency, formatPercent, formatDateTime } from '@/lib/utils';
 import { calculatePrice } from '@/lib/whatsapp';
 import { toast } from 'sonner';
 import { MessageCircle, Lock, Share2, ClipboardCheck, Search } from 'lucide-react';
 import { RichTextView } from '@/components/raffle/RichTextView';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ApiError } from '@/lib/api';
 import type { Prize } from '@/types';
 
@@ -37,6 +38,15 @@ export default function PublicRafflePage({
   const [highlightedNumber, setHighlightedNumber] = useState<number | undefined>();
 
   const { data, isLoading: raffleLoading, error } = usePublicRaffle(username, slug, submittedCode);
+  const router = useRouter();
+
+  // El organizador cambió su nombre de usuario: el link viejo redirige al nuevo.
+  const currentUsername = data?.owner.username;
+  useEffect(() => {
+    if (currentUsername && currentUsername !== username) {
+      router.replace(`/${currentUsername}/${slug}${window.location.search}`);
+    }
+  }, [currentUsername, username, slug, router]);
   const { data: numbersData, isLoading: numbersLoading } = useNumbers(data?.raffle.id ?? '');
   const reserveNumbers = useReserveNumbers(data?.raffle.id ?? '');
   const { selected, sessionId, clear } = useSelectionStore();
@@ -143,13 +153,18 @@ export default function PublicRafflePage({
   };
 
   const handleReserve = async (params: { numbers: number[]; session_id: string; buyer_name: string; comprobante_url?: string }) => {
-    const res = await reserveNumbers.mutateAsync(params);
-    if (res.failed.length > 0 && res.reserved.length === 0) {
-      toast.error('Todos los números ya no estaban disponibles.');
-    } else if (res.failed.length > 0) {
-      toast.warning(`Los números ${res.failed.join(', ')} ya no estaban disponibles.`);
+    try {
+      const res = await reserveNumbers.mutateAsync(params);
+      if (res.failed.length > 0) {
+        toast.warning(
+          `${res.failed.length === 1 ? 'El número' : 'Los números'} ${res.failed.join(', ')} ya no ${res.failed.length === 1 ? 'está disponible' : 'están disponibles'}. Confirmá de nuevo con el resto.`
+        );
+      }
+      return res;
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'No pudimos reservar. Probá de nuevo.');
+      throw err;
     }
-    return res;
   };
 
   return (
@@ -200,8 +215,26 @@ export default function PublicRafflePage({
           <div className="flex flex-wrap gap-4 text-sm text-zinc-400">
             <span>{formatCurrency(raffle.price_per_number)} por número</span>
             <span>{raffle.total_numbers} números totales</span>
-            {raffle.draw_date && <span>Sorteo: {formatDate(raffle.draw_date)}</span>}
+            <span>
+              {raffle.draw_mode === 'all_sold' && 'Se sortea al venderse todos los números'}
+              {raffle.draw_mode === 'fixed_date' && raffle.draw_date && `Sorteo: ${formatDateTime(raffle.draw_date)}`}
+              {raffle.draw_mode === 'first_event' && raffle.draw_date &&
+                `Sorteo: al venderse todo o el ${formatDateTime(raffle.draw_date)}, lo que ocurra primero`}
+            </span>
           </div>
+
+          {promotions.length > 0 && raffle.status === 'active' && (
+            <div className="flex flex-wrap gap-2">
+              {promotions.map((promo) => (
+                <span
+                  key={promo.id}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium bg-violet-600/15 border border-violet-500/30 text-violet-300"
+                >
+                  🔥 {promo.label}
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-zinc-500">
@@ -272,15 +305,15 @@ export default function PublicRafflePage({
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
                 <Input
                   type="number"
-                  min={1}
-                  max={raffle.total_numbers}
-                  placeholder={`Buscar número (1–${raffle.total_numbers})`}
+                  min={0}
+                  max={raffle.total_numbers - 1}
+                  placeholder={`Buscar número (0–${raffle.total_numbers - 1})`}
                   value={searchNum}
                   onChange={(e) => {
                     const val = e.target.value;
                     setSearchNum(val);
                     const n = parseInt(val, 10);
-                    if (!isNaN(n) && n >= 1 && n <= raffle.total_numbers) {
+                    if (!isNaN(n) && n >= 0 && n < raffle.total_numbers) {
                       setHighlightedNumber(n);
                       setGridFilter('all');
                       setTimeout(() => {

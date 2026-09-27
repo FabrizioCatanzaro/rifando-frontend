@@ -10,6 +10,8 @@ export interface User {
   transfer_cuit: string | null;
   transfer_bank: string | null;
   profile_public: boolean;
+  /** Último cambio de nombre de usuario (límite: uno cada 30 días). */
+  username_changed_at?: string | null;
   is_admin?: boolean;
   created_at: string;
 }
@@ -39,14 +41,44 @@ export interface Raffle {
     total: number;
     sold: number;
     reserved: number;
+    /** Suma de lo vendido con promociones aplicadas. */
+    revenue: number;
   };
 }
 
 export interface RaffleNumber {
   number: number;
   status: 'available' | 'reserved' | 'sold';
+  /** Público: "Nombre I.". Dueño: nombre completo. */
   buyer_name: string | null;
   sold_at: string | null;
+  /** Solo para el dueño de la rifa. */
+  purchase_id?: string | null;
+  /** Solo para el dueño: monto cobrado por este número. */
+  sale_amount?: number | null;
+}
+
+/** Compra pendiente: números reservados juntos por un comprador. */
+export interface Purchase {
+  id: string;
+  buyer_name: string;
+  quantity: number;
+  total: number;
+  promotion_label: string | null;
+  comprobante_url: string | null;
+  /** null = no vence (tiene comprobante) */
+  expires_at: string | null;
+  created_at: string;
+  numbers: number[];
+}
+
+export interface ReserveResult {
+  reserved: number[];
+  failed: number[];
+  purchase_id: string | null;
+  total: number;
+  promotion_label?: string | null;
+  expires_at: string | null;
 }
 
 export interface Prize {
@@ -83,6 +115,14 @@ export interface DrawPayment {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   reviewed_at: string | null;
+}
+
+/** Precio y cuenta para pagar el sorteo automático. null si la app no lo configuró. */
+export interface DrawServiceInfo {
+  price: number;
+  alias: string;
+  holder: string | null;
+  bank: string | null;
 }
 
 export interface AdminDrawPayment extends DrawPayment {
