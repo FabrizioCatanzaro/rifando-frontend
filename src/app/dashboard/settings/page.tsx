@@ -10,27 +10,38 @@ import { Label } from '@/components/ui/label';
 import { api, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { TelegramCard } from '@/components/settings/TelegramCard';
+import { UsernameField } from '@/components/settings/UsernameField';
 import type { User } from '@/types';
+import { maskCuitInput, validateAliasOrCbu, validateCuit } from '@/lib/transfer';
 
-const schema = z.object({
-  display_name: z.string().max(100).optional(),
-  whatsapp_number: z.string().max(20).optional(),
-  profile_public: z.boolean(),
-  transfer_alias: z
-    .string()
-    .min(6, 'Mínimo 6 caracteres')
-    .max(20, 'Máximo 20 caracteres')
-    .regex(/^[A-Za-z0-9.\-]+$/, 'Solo letras (sin Ñ), números, puntos y guiones')
-    .optional()
-    .or(z.literal('')),
-  transfer_holder: z.string().max(150).optional(),
-  transfer_cuit: z.string().max(20).optional(),
-  transfer_bank: z.string().max(100).optional(),
-});
+const schema = z
+  .object({
+    display_name: z.string().trim().min(1, 'El nombre completo es obligatorio').max(100),
+    whatsapp_number: z.string().max(20).optional(),
+    profile_public: z.boolean(),
+    transfer_alias: z.string().trim().max(30).optional(),
+    transfer_holder: z.string().trim().max(150).optional(),
+    transfer_cuit: z.string().trim().max(20).optional(),
+    transfer_bank: z.string().trim().max(100).optional(),
+  })
+  .superRefine((data, ctx) => {
+    // Los datos de transferencia se cargan completos o no se cargan.
+    if (!data.transfer_alias) return;
+    const aliasError = validateAliasOrCbu(data.transfer_alias);
+    if (aliasError) ctx.addIssue({ code: 'custom', path: ['transfer_alias'], message: aliasError });
+    if (!data.transfer_holder) ctx.addIssue({ code: 'custom', path: ['transfer_holder'], message: 'El titular es obligatorio' });
+    if (!data.transfer_bank) ctx.addIssue({ code: 'custom', path: ['transfer_bank'], message: 'La entidad bancaria es obligatoria' });
+    if (!data.transfer_cuit) {
+      ctx.addIssue({ code: 'custom', path: ['transfer_cuit'], message: 'El CUIT/CUIL es obligatorio' });
+    } else {
+      const cuitError = validateCuit(data.transfer_cuit);
+      if (cuitError) ctx.addIssue({ code: 'custom', path: ['transfer_cuit'], message: cuitError });
+    }
+  });
 type FormData = z.infer<typeof schema>;
 
 export default function SettingsPage() {
-  useEffect(() => { document.title = 'Rifando — Configuración'; }, []);
+  useEffect(() => { document.title = 'Rifando — Mis datos'; }, []);
   const { user, setUser } = useAuthStore();
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -60,6 +71,9 @@ export default function SettingsPage() {
     }
   }, [user, reset]);
 
+  // CUIT/CUIL: solo dígitos, con guiones automáticos.
+  const cuitField = register('transfer_cuit');
+
   const onSubmit = async (data: FormData) => {
     try {
       const res = await api.patch<{ user: User }>('/api/users/profile', data);
@@ -73,8 +87,8 @@ export default function SettingsPage() {
   return (
     <div className="max-w-xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-50">Configuración</h1>
-        <p className="text-sm text-zinc-400 mt-1">Gestioná tu perfil y preferencias</p>
+        <h1 className="text-2xl font-bold text-zinc-50">Mis datos</h1>
+        <p className="text-sm text-zinc-400 mt-1">Tu perfil, tus datos para cobrar y tus notificaciones</p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -86,14 +100,12 @@ export default function SettingsPage() {
             <Input value={user?.email ?? ''} disabled className="bg-zinc-950 border-zinc-700 opacity-60" />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Nombre de usuario</Label>
-            <Input value={user?.username ?? ''} disabled className="bg-zinc-950 border-zinc-700 opacity-60" />
-          </div>
+          <UsernameField />
 
           <div className="space-y-1.5">
-            <Label>Nombre para mostrar</Label>
+            <Label>Nombre completo *</Label>
             <Input {...register('display_name')} className="bg-zinc-950 border-zinc-700" placeholder="Juan Pérez" />
+            {errors.display_name && <p className="text-xs text-red-400">{errors.display_name.message}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -128,50 +140,61 @@ export default function SettingsPage() {
           <div>
             <h2 className="font-semibold text-zinc-100">Datos de transferencia</h2>
             <p className="text-xs text-zinc-500 mt-1">
-              Si completás el alias, los compradores verán tus datos bancarios al confirmar su reserva.
+              Completá los cuatro campos. Los compradores verán estos datos al confirmar su reserva.
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label>Alias CBU / CVU</Label>
+            <Label>Alias o CBU/CVU *</Label>
             <Input
               {...register('transfer_alias')}
               className="bg-zinc-950 border-zinc-700"
-              placeholder="mi.alias.mercadopago"
-              maxLength={20}
+              placeholder="mi.alias.mp o 22 dígitos"
+              maxLength={30}
             />
             {errors.transfer_alias ? (
               <p className="text-xs text-red-400">{errors.transfer_alias.message}</p>
             ) : (
-              <p className="text-xs text-zinc-500">6–20 caracteres · letras (sin Ñ), números, puntos y guiones</p>
+              <p className="text-xs text-zinc-500">Alias: 6–20 caracteres (letras sin Ñ, números, puntos y guiones). CBU/CVU: 22 dígitos.</p>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Nombre del titular</Label>
+            <Label>Nombre del titular *</Label>
             <Input
               {...register('transfer_holder')}
               className="bg-zinc-950 border-zinc-700"
               placeholder="Juan Pérez"
             />
+            {errors.transfer_holder && <p className="text-xs text-red-400">{errors.transfer_holder.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>CUIT / CUIL</Label>
+              <Label>CUIT / CUIL *</Label>
               <Input
-                {...register('transfer_cuit')}
+                {...cuitField}
+                onChange={(e) => {
+                  const deleting = (e.nativeEvent as InputEvent).inputType?.startsWith('delete') ?? false;
+                  e.target.value = maskCuitInput(e.target.value, deleting);
+                  return cuitField.onChange(e);
+                }}
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={13}
                 className="bg-zinc-950 border-zinc-700"
                 placeholder="20-12345678-9"
               />
+              {errors.transfer_cuit && <p className="text-xs text-red-400">{errors.transfer_cuit.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Banco / Billetera</Label>
+              <Label>Banco / Billetera *</Label>
               <Input
                 {...register('transfer_bank')}
                 className="bg-zinc-950 border-zinc-700"
                 placeholder="Mercado Pago"
               />
+              {errors.transfer_bank && <p className="text-xs text-red-400">{errors.transfer_bank.message}</p>}
             </div>
           </div>
         </div>
