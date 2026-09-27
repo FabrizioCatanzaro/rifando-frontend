@@ -5,6 +5,7 @@ import { useNumbers, useReserveNumbers } from '@/hooks/useNumbers';
 import { useSelectionStore } from '@/stores/selectionStore';
 import { NumberGrid } from '@/components/raffle/NumberGrid';
 import { BuyerSheet } from '@/components/raffle/BuyerSheet';
+import { MercadoPagoReturn } from '@/components/raffle/MercadoPagoReturn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import { toast } from 'sonner';
 import { MessageCircle, Lock, Share2, ClipboardCheck, Search } from 'lucide-react';
 import { RichTextView } from '@/components/raffle/RichTextView';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ApiError } from '@/lib/api';
 import type { Prize } from '@/types';
 
@@ -37,7 +38,13 @@ export default function PublicRafflePage({
   const [searchNum, setSearchNum] = useState('');
   const [highlightedNumber, setHighlightedNumber] = useState<number | undefined>();
 
-  const { data, isLoading: raffleLoading, error } = usePublicRaffle(username, slug, submittedCode);
+  // Rifa privada con ?code= en la URL (por ejemplo, al volver de Mercado Pago): entra directo.
+  // Un código ingresado a mano tiene prioridad.
+  const urlCode = useSearchParams().get('code');
+  const accessCode =
+    submittedCode ?? (urlCode && /^[A-Za-z0-9]{6}$/.test(urlCode) ? urlCode.toUpperCase() : undefined);
+
+  const { data, isLoading: raffleLoading, error } = usePublicRaffle(username, slug, accessCode);
   const router = useRouter();
 
   // El organizador cambió su nombre de usuario: el link viejo redirige al nuevo.
@@ -488,6 +495,7 @@ export default function PublicRafflePage({
         open={sheetOpen}
         onClose={() => { setSheetOpen(false); clear(); }}
         selectedNumbers={selectedArr}
+        raffleId={raffle.id}
         raffleName={raffle.title}
         pricePerNumber={raffle.price_per_number}
         promotions={promotions}
@@ -502,6 +510,8 @@ export default function PublicRafflePage({
         confirmationMethod={raffle.confirmation_method ?? 'whatsapp'}
         onReserve={handleReserve}
       />
+
+      <MercadoPagoReturn raffleId={raffle.id} />
     </div>
   );
 }

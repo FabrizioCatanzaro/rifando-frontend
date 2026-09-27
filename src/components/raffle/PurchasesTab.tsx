@@ -7,14 +7,24 @@ import { Input } from '@/components/ui/input';
 import { usePendingPurchases, useConfirmPurchase, useRejectPurchase } from '@/hooks/useNumbers';
 import { ApiError } from '@/lib/api';
 import { comprobanteThumbUrl, formatCurrency, isPdfUrl } from '@/lib/utils';
-import type { Purchase } from '@/types';
+import type { ConfirmationMethod, Purchase } from '@/types';
 
 /** Minutos que faltan para que venza la reserva. */
 function minutesLeft(expiresAt: string, now: number): number {
   return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 60000));
 }
 
-function PurchaseCard({ purchase, raffleId, now }: { purchase: Purchase; raffleId: string; now: number }) {
+function PurchaseCard({
+  purchase,
+  raffleId,
+  now,
+  confirmationMethod,
+}: {
+  purchase: Purchase;
+  raffleId: string;
+  now: number;
+  confirmationMethod?: ConfirmationMethod;
+}) {
   const [name, setName] = useState(purchase.buyer_name);
   const [confirmingReject, setConfirmingReject] = useState(false);
   const confirm = useConfirmPurchase(raffleId);
@@ -98,7 +108,11 @@ function PurchaseCard({ purchase, raffleId, now }: { purchase: Purchase; raffleI
           </div>
         </a>
       ) : (
-        <p className="text-xs text-zinc-500">Sin comprobante. El comprador te contacta por WhatsApp.</p>
+        <p className="text-xs text-zinc-500">
+          {confirmationMethod === 'mercadopago'
+            ? 'El comprador está pagando con Mercado Pago. Se confirma sola al acreditarse el pago.'
+            : 'Sin comprobante. El comprador te contacta por WhatsApp.'}
+        </p>
       )}
 
       <p className="flex items-center gap-1.5 text-xs text-zinc-500">
@@ -139,7 +153,13 @@ function PurchaseCard({ purchase, raffleId, now }: { purchase: Purchase; raffleI
   );
 }
 
-export function PurchasesTab({ raffleId }: { raffleId: string }) {
+export function PurchasesTab({
+  raffleId,
+  confirmationMethod,
+}: {
+  raffleId: string;
+  confirmationMethod?: ConfirmationMethod;
+}) {
   const { data, isLoading } = usePendingPurchases(raffleId);
   const [now, setNow] = useState(() => Date.now());
 
@@ -171,7 +191,7 @@ export function PurchasesTab({ raffleId }: { raffleId: string }) {
         Revisá el pago y confirmá cada reserva. Al rechazarla, los números vuelven a estar libres.
       </p>
       {purchases.map((p) => (
-        <PurchaseCard key={p.id} purchase={p} raffleId={raffleId} now={now} />
+        <PurchaseCard key={p.id} purchase={p} raffleId={raffleId} now={now} confirmationMethod={confirmationMethod} />
       ))}
     </div>
   );

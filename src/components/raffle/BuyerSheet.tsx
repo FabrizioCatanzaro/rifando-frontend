@@ -10,12 +10,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MessageCircle, Copy, Check, Upload, X, CheckCircle2, FileText } from 'lucide-react';
+import { MessageCircle, Copy, Check, Upload, X, CheckCircle2, FileText, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/utils';
 import { buildWhatsAppUrl, calculatePrice } from '@/lib/whatsapp';
-import { api } from '@/lib/api';
-import type { Promotion, ReserveResult } from '@/types';
+import { api, ApiError } from '@/lib/api';
+import { createMercadoPagoCheckout } from '@/hooks/usePayments';
+import { savePendingCheckout } from '@/lib/mpCheckout';
+import type { ConfirmationMethod, Promotion, ReserveResult } from '@/types';
 
 interface TransferInfo {
   alias: string | null;
@@ -28,13 +30,14 @@ interface BuyerSheetProps {
   open: boolean;
   onClose: () => void;
   selectedNumbers: number[];
+  raffleId: string;
   raffleName: string;
   pricePerNumber: number;
   promotions: Promotion[];
   whatsappNumber: string;
   transferInfo: TransferInfo;
   sessionId: string;
-  confirmationMethod: 'whatsapp' | 'upload';
+  confirmationMethod: ConfirmationMethod;
   onReserve: (params: {
     numbers: number[];
     session_id: string;
@@ -56,6 +59,7 @@ export function BuyerSheet({
   open,
   onClose,
   selectedNumbers,
+  raffleId,
   raffleName,
   pricePerNumber,
   promotions,
@@ -72,6 +76,9 @@ export function BuyerSheet({
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [comprobantePreview, setComprobantePreview] = useState<string | null>(null);
   const [result, setResult] = useState<ReserveResult | null>(null);
+  // Mercado Pago: compra ya reservada. Si falla el inicio del pago, se reintenta sin volver a reservar.
+  const [mpPurchaseId, setMpPurchaseId] = useState<string | null>(null);
+  const isMercadoPago = confirmationMethod === 'mercadopago';
   // Copia de la selección al abrir: la grilla se refresca en segundo plano y no debe cambiar el modal.
   const [snapshot, setSnapshot] = useState<number[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -112,7 +119,40 @@ export function BuyerSheet({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleMercadoPago = async () => {
+    if (!name.trim() || pending.length === 0) return;
+    setLoading(true);
+    let redirecting = false;
+    try {
+      let purchaseId = mpPurchaseId;
+      if (!purchaseId) {
+        const res = await onReserve({ numbers: pending, session_id: sessionId, buyer_name: name.trim() });
+        if (res.failed.length > 0) {
+          setUnavailable((prev) => [...prev, ...res.failed]);
+          return;
+        }
+        if (!res.purchase_id) return;
+        purchaseId = res.purchase_id;
+        setMpPurchaseId(purchaseId);
+      }
+
+      try {
+        const checkout = await createMercadoPagoCheckout(raffleId, purchaseId, sessionId);
+        savePendingCheckout({ raffleId, purchaseId, sessionId });
+        redirecting = true;
+        window.location.assign(checkout.init_point);
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : 'No se pudo abrir Mercado Pago. Probá de nuevo.');
+      }
+    } catch {
+      // error de la reserva: el toast lo muestra onReserve
+    } finally {
+      if (!redirecting) setLoading(false);
+    }
+  };
+
   const handleSend = async () => {
+    if (isMercadoPago) return handleMercadoPago();
     if (!name.trim() || pending.length === 0) return;
     if (confirmationMethod === 'upload' && !comprobanteFile) {
       toast.error('Adjuntá el comprobante de transferencia para continuar');
@@ -155,6 +195,7 @@ export function BuyerSheet({
     setComprobanteFile(null);
     setComprobantePreview(null);
     setResult(null);
+    setMpPurchaseId(null);
     setSnapshot([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
     onClose();
@@ -260,7 +301,7 @@ export function BuyerSheet({
                     )}
                   </div>
 
-                  {transferInfo.alias && (
+                  {transferInfo.alias && !isMercadoPago && (
                     <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3 space-y-2">
                       <p className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">Datos para transferir</p>
                       <div className="space-y-1 text-sm">
@@ -313,6 +354,7 @@ export function BuyerSheet({
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Ej: Juan Pérez"
                       className="bg-zinc-900 border-zinc-700"
+                      disabled={!!mpPurchaseId}
                       onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                     />
                   </div>
@@ -383,11 +425,24 @@ export function BuyerSheet({
                   )}
 
                   <p className="text-xs text-zinc-500 text-center">
-                    {confirmationMethod === 'upload'
-                      ? 'Tus números quedan reservados hasta que el organizador confirme tu pago.'
-                      : 'Tus números quedan reservados 30 minutos. En el paso siguiente enviás el mensaje por WhatsApp.'}
+                    {isMercadoPago
+                      ? 'Tus números quedan reservados 30 minutos mientras pagás. Se confirman solos al acreditarse el pago.'
+                      : confirmationMethod === 'upload'
+                        ? 'Tus números quedan reservados hasta que el organizador confirme tu pago.'
+                        : 'Tus números quedan reservados 30 minutos. En el paso siguiente enviás el mensaje por WhatsApp.'}
                   </p>
 
+                  {isMercadoPago ? (
+                    <Button
+                      onClick={handleSend}
+                      disabled={!name.trim() || loading}
+                      className="w-full bg-sky-600 hover:bg-sky-500 text-white gap-2"
+                      size="lg"
+                    >
+                      <CreditCard className="h-5 w-5" />
+                      {loading ? 'Abriendo Mercado Pago...' : mpPurchaseId ? 'Reintentar pago' : 'Pagar con Mercado Pago'}
+                    </Button>
+                  ) : (
                   <Button
                     onClick={handleSend}
                     disabled={!name.trim() || loading}
@@ -403,6 +458,7 @@ export function BuyerSheet({
                       : 'Confirmar'
                     }
                   </Button>
+                  )}
                 </div>
               )}
 

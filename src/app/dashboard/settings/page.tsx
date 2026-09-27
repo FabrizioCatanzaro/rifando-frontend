@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { api, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { TelegramCard } from '@/components/settings/TelegramCard';
+import { MercadoPagoCard } from '@/components/settings/MercadoPagoCard';
 import { UsernameField } from '@/components/settings/UsernameField';
 import type { User } from '@/types';
 import { maskCuitInput, validateAliasOrCbu, validateCuit } from '@/lib/transfer';
@@ -203,6 +204,8 @@ export default function SettingsPage() {
           {isSubmitting ? 'Guardando...' : 'Guardar cambios'}
         </Button>
       </form>
+
+      <MercadoPagoCard />
 
       <TelegramCard />
     </div>

@@ -15,6 +15,8 @@ import {
   useDrawPayment, useSubmitDrawPayment, useExecuteDraw,
 } from '@/hooks/useRaffle';
 import { useNumbers, useBulkSell, useBulkRelease } from '@/hooks/useNumbers';
+import { useMercadoPagoStatus } from '@/hooks/usePayments';
+import { MercadoPagoPayments } from '@/components/raffle/MercadoPagoPayments';
 import { useAuthStore } from '@/stores/authStore';
 import { formatCurrency, formatPercent, formatDateTime as formatDate, isoToLocalInput, localInputToIso } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
@@ -92,6 +94,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
   const { data: promosData } = usePromotions(id);
 
   const updateRaffle = useUpdateRaffle(id);
+  const { data: mpStatus } = useMercadoPagoStatus();
   const deleteRaffle = useDeleteRaffle();
   const bulkSell = useBulkSell(id);
   const bulkRelease = useBulkRelease(id);
@@ -776,11 +779,12 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
           {/* ── Confirmation method ── */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
             <SectionTitle>Método de confirmación</SectionTitle>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {(
                 [
                   { value: 'whatsapp', label: 'WhatsApp', description: 'El comprador te escribe por WhatsApp con los datos.' },
                   { value: 'upload', label: 'Comprobante', description: 'El comprador adjunta el comprobante en la página.' },
+                  { value: 'mercadopago', label: 'Mercado Pago', description: 'El comprador paga online y los números se confirman solos.' },
                 ] as const
               ).map(({ value, label, description }) => (
                 <button
@@ -788,11 +792,15 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                   type="button"
                   onClick={async () => {
                     if (raffle.confirmation_method === value) return;
+                    if (value === 'mercadopago' && mpStatus && !mpStatus.linked) {
+                      toast.error('Vinculá tu cuenta de Mercado Pago en Mis datos para usar este método');
+                      return;
+                    }
                     try {
                       await updateRaffle.mutateAsync({ confirmation_method: value } as never);
                       toast.success('Método de confirmación actualizado');
-                    } catch {
-                      toast.error('Error al actualizar');
+                    } catch (err) {
+                      toast.error(err instanceof ApiError ? err.message : 'Error al actualizar');
                     }
                   }}
                   className={`text-left p-3 rounded-xl border transition-colors space-y-0.5 ${
@@ -1146,7 +1154,12 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
       )}
 
       {/* ── Tab: Reservas ── */}
-      {tab === 'reservations' && <PurchasesTab raffleId={id} />}
+      {tab === 'reservations' && (
+        <div className="space-y-8">
+          <PurchasesTab raffleId={id} confirmationMethod={raffle?.confirmation_method} />
+          <MercadoPagoPayments raffleId={id} />
+        </div>
+      )}
 
       {/* ── Tab: Compradores ── */}
       {tab === 'buyers' && (() => {
