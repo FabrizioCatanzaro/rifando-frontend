@@ -8,15 +8,23 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LinkButton } from '@/components/ui/link-button';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 export default function DashboardPage() {
+  const { confirm } = useConfirm();
   useEffect(() => { document.title = 'Rifando — Dashboard'; }, []);
   const user = useAuthStore((s) => s.user);
   const { data, isLoading } = useMyRaffles();
   const deleteRaffle = useDeleteRaffle();
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar esta rifa? Esta acción no se puede deshacer.')) return;
+    const ok = await confirm({
+      title: '¿Eliminar esta rifa?',
+      description: 'Se borran los números, premios, compras y compradores. Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await deleteRaffle.mutateAsync(id);
       toast.success('Rifa eliminada');
@@ -28,7 +36,7 @@ export default function DashboardPage() {
   const raffles = data?.raffles ?? [];
   const activeRaffles = raffles.filter((r) => r.status === 'active');
   const totalRevenue = raffles.reduce(
-    (sum, r) => sum + (r.stats?.sold ?? 0) * r.price_per_number,
+    (sum, r) => sum + (r.stats?.revenue ?? 0),
     0
   );
 

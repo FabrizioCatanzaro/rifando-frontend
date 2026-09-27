@@ -9,6 +9,7 @@ import {
   Bold, Italic, Link2, List, ListOrdered,
   Heading1, Heading2, Heading3, Quote, Minus,
 } from 'lucide-react';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const CHAR_LIMIT = 6000;
 
@@ -45,6 +46,7 @@ function ToolbarButton({
 }
 
 export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
+  const { prompt } = useConfirm();
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -73,17 +75,18 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
     immediatelyRender: false,
   });
 
-  const handleLink = useCallback(() => {
+  const handleLink = useCallback(async () => {
     if (!editor) return;
     if (editor.isActive('link')) {
       editor.chain().focus().unsetLink().run();
       return;
     }
-    const url = window.prompt('URL del enlace:');
+    const url = await prompt({ title: 'Agregar enlace', placeholder: 'https://…', confirmLabel: 'Agregar' });
     if (url) {
-      editor.chain().focus().setLink({ href: url }).run();
+      const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+      editor.chain().focus().setLink({ href }).run();
     }
-  }, [editor]);
+  }, [editor, prompt]);
 
   if (!editor) return null;
 

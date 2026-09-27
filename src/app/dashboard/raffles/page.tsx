@@ -7,8 +7,10 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LinkButton } from '@/components/ui/link-button';
 import { toast } from 'sonner';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 export default function RafflesPage() {
+  const { confirm } = useConfirm();
   useEffect(() => { document.title = 'Rifando — Mis rifas'; }, []);
   const user = useAuthStore((s) => s.user);
   const { data, isLoading } = useMyRaffles();
@@ -17,7 +19,13 @@ export default function RafflesPage() {
   const raffles = data?.raffles ?? [];
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar esta rifa? Esta acción no se puede deshacer.')) return;
+    const ok = await confirm({
+      title: '¿Eliminar esta rifa?',
+      description: 'Se borran los números, premios, compras y compradores. Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await deleteRaffle.mutateAsync(id);
       toast.success('Rifa eliminada');
