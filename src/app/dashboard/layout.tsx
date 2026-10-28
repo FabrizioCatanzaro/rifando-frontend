@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 const NAV = [
   { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
   { href: '/dashboard/raffles', label: 'Mis rifas', icon: Ticket },
-  { href: '/dashboard/settings', label: 'Configuración', icon: Settings },
+  { href: '/dashboard/settings', label: 'Mis datos', icon: Settings },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

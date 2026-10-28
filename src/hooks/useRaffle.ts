@@ -1,7 +1,7 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Raffle, Prize, Promotion, PublicRaffleData, DrawPayment, AdminDrawPayment } from '@/types';
+import type { Raffle, Prize, Promotion, PublicRaffleData, DrawPayment, AdminDrawPayment, DrawServiceInfo } from '@/types';
 
 export function useMyRaffles() {
   return useQuery({
@@ -113,7 +113,10 @@ export function useDeletePromotion(raffleId: string) {
 export function useDrawPayment(raffleId: string) {
   return useQuery({
     queryKey: ['draw-payment', raffleId],
-    queryFn: () => api.get<{ draw_unlocked: boolean; payment: DrawPayment | null }>(`/api/raffles/${raffleId}/draw-payment`),
+    queryFn: () =>
+      api.get<{ draw_unlocked: boolean; payment: DrawPayment | null; service: DrawServiceInfo | null }>(
+        `/api/raffles/${raffleId}/draw-payment`
+      ),
     enabled: !!raffleId,
   });
 }

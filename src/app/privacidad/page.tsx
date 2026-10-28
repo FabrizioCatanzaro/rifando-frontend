@@ -36,7 +36,7 @@ export default function PrivacidadPage() {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-zinc-200">4. Visibilidad de tu perfil</h2>
           <p>
-            Tu perfil y tus rifas activas son públicas por defecto, lo que permite que los compradores accedan a ellas por URL. Podés configurar tu perfil como privado desde la sección de Configuración, lo que ocultará tus rifas de la vista pública.
+            Tu perfil y tus rifas activas son públicas por defecto, lo que permite que los compradores accedan a ellas por URL. Podés configurar tu perfil como privado desde la sección Mis datos, lo que ocultará tus rifas de la vista pública.
           </p>
         </section>
 

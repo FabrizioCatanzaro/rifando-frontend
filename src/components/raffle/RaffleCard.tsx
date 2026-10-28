@@ -80,7 +80,7 @@ export function RaffleCard({ raffle, username, onDelete }: RaffleCardProps) {
         ['Vendidos', sold],
         ['Reservados', reserved],
         ['Disponibles', raffle.total_numbers - sold - reserved],
-        ['Recaudado ($)', sold * raffle.price_per_number],
+        ['Recaudado ($)', raffle.stats?.revenue ?? 0],
         ...(raffle.draw_date ? [['Fecha sorteo', formatDate(raffle.draw_date)]] : []),
         ...(raffle.winner_number !== null ? [['Número ganador', raffle.winner_number]] : []),
       ];
@@ -100,17 +100,19 @@ export function RaffleCard({ raffle, username, onDelete }: RaffleCardProps) {
       // Sheet 3: Compradores (sold only, grouped)
       const soldNumbers = numbers.filter((n) => n.status === 'sold' && n.buyer_name);
       const buyerMap = new Map<string, number[]>();
+      const buyerTotals = new Map<string, number>();
       for (const n of soldNumbers) {
         const name = n.buyer_name!;
         if (!buyerMap.has(name)) buyerMap.set(name, []);
         buyerMap.get(name)!.push(n.number);
+        buyerTotals.set(name, (buyerTotals.get(name) ?? 0) + (n.sale_amount ?? raffle.price_per_number));
       }
       const buyerHeader = ['Comprador', 'Números', 'Cantidad', 'Total ($)'];
       const buyerRows = Array.from(buyerMap.entries()).map(([name, nums]) => [
         name,
         nums.sort((a, b) => a - b).join(', '),
         nums.length,
-        nums.length * raffle.price_per_number,
+        buyerTotals.get(name) ?? 0,
       ]);
       const wsB = XLSX.utils.aoa_to_sheet([buyerHeader, ...buyerRows]);
       wsB['!cols'] = [{ wch: 30 }, { wch: 40 }, { wch: 10 }, { wch: 14 }];

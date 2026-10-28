@@ -1,5 +1,6 @@
 import { api } from '@/lib/api';
 import Link from 'next/link';
+import { permanentRedirect } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 import type { Raffle } from '@/types';
@@ -44,6 +45,9 @@ export default async function UserProfilePage({
       </div>
     );
   }
+
+  // El usuario cambió su nombre: el link viejo redirige al nuevo.
+  if (data.profile.username !== username) permanentRedirect(`/${data.profile.username}`);
 
   const { profile, private: isPrivate, raffles } = data;
 

@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/authStore';
 import { useAdminDrawPayments, useApproveDrawPayment, useRejectDrawPayment } from '@/hooks/useRaffle';
 import { ApiError } from '@/lib/api';
-import { formatDate } from '@/lib/utils';
+import { comprobanteThumbUrl, formatDate } from '@/lib/utils';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -21,6 +22,7 @@ const STATUS_CLASSES: Record<string, string> = {
 };
 
 export default function AdminPage() {
+  const { confirm } = useConfirm();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const isLoading = useAuthStore((s) => s.isLoading);
@@ -45,7 +47,13 @@ export default function AdminPage() {
   };
 
   const handleReject = async (paymentId: string) => {
-    if (!confirm('¿Rechazar este comprobante?')) return;
+    const ok = await confirm({
+      title: '¿Rechazar este comprobante?',
+      description: 'El rifante podrá enviar uno nuevo.',
+      confirmLabel: 'Rechazar',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await reject.mutateAsync(paymentId);
       toast.success('Comprobante rechazado.');
@@ -99,7 +107,7 @@ export default function AdminPage() {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={p.comprobante_url}
+                      src={comprobanteThumbUrl(p.comprobante_url)}
                       alt="Comprobante"
                       className="w-full max-h-64 object-contain rounded-lg bg-zinc-800 hover:opacity-90 transition-opacity cursor-pointer"
                     />

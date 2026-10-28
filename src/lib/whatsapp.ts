@@ -17,6 +17,7 @@ interface BuildUrlParams {
   transferInfo?: TransferInfo;
 }
 
+// Misma lógica que rifando-api/src/utils/pricing.ts → calculatePrice. Cambiá ambas juntas.
 export function calculatePrice(
   count: number,
   pricePerNumber: number,
@@ -71,7 +72,7 @@ export function buildWhatsAppUrl(params: BuildUrlParams): string {
 
   if (transferInfo?.alias) {
     msg += `\n\n*Datos para transferir:*\n`;
-    msg += `Alias: ${transferInfo.alias}\n`;
+    msg += `Alias/CBU: ${transferInfo.alias}\n`;
     if (transferInfo.holder) msg += `Titular: ${transferInfo.holder}\n`;
     if (transferInfo.cuit) msg += `CUIT/CUIL: ${transferInfo.cuit}\n`;
     if (transferInfo.bank) msg += `Banco: ${transferInfo.bank}`;
