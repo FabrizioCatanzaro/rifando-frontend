@@ -4,6 +4,7 @@ import './globals.css';
 import { Providers } from '@/components/providers';
 import { Toaster } from '@/components/ui/sonner';
 import { ConditionalFooter } from '@/components/layout/ConditionalFooter';
+import { SiteHeader } from '@/components/layout/SiteHeader';
 
 const geist = Geist({
   variable: '--font-sans',
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className={`${geist.variable} font-sans h-full antialiased dark`}>
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-50">
         <Providers>
+          <SiteHeader />
           {children}
           <ConditionalFooter />
           <Toaster richColors position="top-right" />

@@ -1,14 +1,11 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Ticket, Settings, LogOut, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Ticket, Settings, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { api } from '@/lib/api';
-import { useAuthStore } from '@/stores/authStore';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { UserMenu } from '@/components/layout/UserMenu';
 
 const NAV = [
   { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
@@ -20,21 +17,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading } = useAuth();
-  const setUser = useAuthStore((s) => s.setUser);
-  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.push('/login');
     }
   }, [user, isLoading, router]);
-
-  const handleLogout = async () => {
-    await api.post('/api/auth/logout', {});
-    setUser(null);
-    queryClient.clear();
-    router.push('/');
-  };
 
   if (isLoading) {
     return (
@@ -87,18 +75,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Admin
           </Link>
         )}
-
-        <div className="mt-auto">
-          <div className="px-3 py-2 text-xs text-zinc-500 truncate">{user.email}</div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-zinc-400 hover:text-red-400"
-            onClick={handleLogout}
-          >
-            <LogOut className="h-4 w-4" /> Salir
-          </Button>
-        </div>
       </aside>
 
       {/* Main */}
@@ -109,9 +85,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <img src="/logo-mark.png" alt="" className="h-7 w-7" aria-hidden />
             <img src="/logo-text.png" alt="Rifando" className="h-4 w-auto" />
           </Link>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <UserMenu user={user} />
+        </header>
+
+        {/* Desktop header */}
+        <header className="hidden md:flex items-center justify-end px-8 py-3 border-b border-zinc-800">
+          <UserMenu user={user} />
         </header>
 
         <main className="flex-1 p-4 pb-20 md:pb-8 md:p-8">{children}</main>

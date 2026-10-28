@@ -1,6 +1,7 @@
 'use client';
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import type { User } from '@/types';
@@ -26,4 +27,19 @@ export function useAuth() {
   }, [queryLoading, setLoading]);
 
   return { user, isLoading: isLoading || queryLoading };
+}
+
+/** Cierra la sesión, limpia el estado y vuelve a la home. */
+export function useLogout() {
+  const setUser = useAuthStore((s) => s.setUser);
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
+  return async () => {
+    await api.post('/api/auth/logout', {}).catch(() => {});
+    setUser(null);
+    queryClient.clear();
+    queryClient.setQueryData(['auth', 'me'], null);
+    router.push('/');
+  };
 }

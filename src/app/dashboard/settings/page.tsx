@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { TelegramCard } from '@/components/settings/TelegramCard';
 import { MercadoPagoCard } from '@/components/settings/MercadoPagoCard';
 import { UsernameField } from '@/components/settings/UsernameField';
+import { AvatarField } from '@/components/settings/AvatarField';
 import type { User } from '@/types';
 import { maskCuitInput, validateAliasOrCbu, validateCuit } from '@/lib/transfer';
 
@@ -95,6 +96,8 @@ export default function SettingsPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
           <h2 className="font-semibold text-zinc-100">Perfil</h2>
+
+          <AvatarField />
 
           <div className="space-y-1.5">
             <Label>Email</Label>
