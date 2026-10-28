@@ -37,7 +37,7 @@ Ejecuta `npm run lint` y `npm run build` antes de dar por terminada una tarea.
 
 | Ruta | Uso |
 |---|---|
-| `/` | Landing. |
+| `/` | Home: hero, rifas activas (`GET /api/raffles/explore`), cómo funciona, formas de cobro, FAQ. |
 | `/login`, `/register` | Grupo `(auth)`. |
 | `/dashboard` | Inicio del rifante. |
 | `/dashboard/raffles` | Mis rifas (tarjetas + "Nueva Rifa"). |
@@ -61,7 +61,10 @@ src/
     ui/                # componentes shadcn (base-nova)
     raffle/            # BuyerSheet, NumberGrid, NumberCell, RaffleCard, RafflePDF, RichText*
     settings/          # TelegramCard, MercadoPagoCard, UsernameField
-    layout/, shared/
+    layout/            # SiteHeader, UserMenu, Footer
+    home/              # HeroGrid, ActiveRaffles, HomeCta
+    admin/             # AdminFeePayments
+    shared/            # UserAvatar, EmptyState, SkeletonGrid
   hooks/               # useAuth, useRaffle, useNumbers (React Query)
   stores/              # authStore, selectionStore (Zustand)
   lib/
@@ -130,3 +133,16 @@ src/
 - `?code=` en la URL abre una rifa privada sin pedir el código.
 - Historial de pagos: `MercadoPagoPayments`, debajo de la solapa "Reservas".
 - El rifante elige el método en "Configuración". `mercadopago` exige cuenta vinculada.
+
+## Sprint 2
+
+- `SiteHeader` (root layout) muestra `UserMenu` en todas las páginas públicas. El dashboard usa el mismo `UserMenu` en su header.
+- `UserMenu`: nombre + foto, accesos al panel y "Cerrar sesión" (`useLogout` de `hooks/useAuth.ts`).
+- Foto de perfil: `AvatarField` en "Mis datos". Sube con `/api/upload/image` (folder `avatars`).
+- `SiteHeader` es sticky solo en la home: `/[username]/[slug]` ya tiene su barra sticky.
+- Calculadora de precio: `lib/fees.ts` (`priceForTarget`, `feeBreakdown`). Porcentajes desde `GET /api/fees` (`useFeeConfig`).
+  - La comisión de Mercado Pago solo se descuenta con `confirmation_method = 'mercadopago'`.
+  - En una rifa existente usá `raffle.app_fee_percent`, no el porcentaje vigente.
+- `PriceCalculator` + `PaymentMethodPicker` en "Nueva rifa". `FeeBreakdownCard` también en "Configuración".
+- Tiempo de reserva: `raffle.reservation_ttl_minutes`, editable en "Configuración" con método WhatsApp.
+- Comisión de ventas manuales: `FeePaymentCard` en "Finalizar". El admin la aprueba en `AdminFeePayments`.
