@@ -1,7 +1,7 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Raffle, Prize, Promotion, PublicRaffleData, DrawPayment, AdminDrawPayment, DrawServiceInfo } from '@/types';
+import type { Raffle, Prize, Promotion, PublicRaffleData, DrawPayment, AdminDrawPayment, DrawServiceInfo, ExploreData } from '@/types';
 
 export function useMyRaffles() {
   return useQuery({
@@ -165,5 +165,14 @@ export function useRejectDrawPayment() {
   return useMutation({
     mutationFn: (paymentId: string) => api.patch(`/api/admin/draw-payments/${paymentId}/reject`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'draw-payments'] }),
+  });
+}
+
+/** Rifas activas y estadísticas para la home. */
+export function useExplore() {
+  return useQuery({
+    queryKey: ['raffles', 'explore'],
+    queryFn: () => api.get<ExploreData>('/api/raffles/explore'),
+    staleTime: 60 * 1000,
   });
 }

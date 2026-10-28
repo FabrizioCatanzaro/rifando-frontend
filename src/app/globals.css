@@ -244,3 +244,14 @@
 .rich-text-content .tiptap > *:last-child {
   margin-bottom: 0 !important;
 }
+/* Home: entrada de la grilla del hero (una sola secuencia al cargar). */
+@keyframes cell-fill {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+.cell-fill {
+  animation: cell-fill 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell-fill { animation: none; }
+}
