@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/authStore';
+import { AdminFeePayments } from '@/components/admin/AdminFeePayments';
 import { useAdminDrawPayments, useApproveDrawPayment, useRejectDrawPayment } from '@/hooks/useRaffle';
 import { ApiError } from '@/lib/api';
 import { comprobanteThumbUrl, formatDate } from '@/lib/utils';
@@ -157,6 +158,8 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      <AdminFeePayments />
     </div>
   );
 }

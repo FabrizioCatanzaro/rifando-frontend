@@ -17,6 +17,10 @@ import {
 import { useNumbers, useBulkSell, useBulkRelease } from '@/hooks/useNumbers';
 import { useMercadoPagoStatus } from '@/hooks/usePayments';
 import { MercadoPagoPayments } from '@/components/raffle/MercadoPagoPayments';
+import { FeeBreakdownCard } from '@/components/raffle/FeeBreakdownCard';
+import { FeePaymentCard } from '@/components/raffle/FeePaymentCard';
+import { useFeeConfig } from '@/hooks/useFees';
+import { RESERVATION_TTL_OPTIONS } from '@/lib/fees';
 import { useAuthStore } from '@/stores/authStore';
 import { formatCurrency, formatPercent, formatDateTime as formatDate, isoToLocalInput, localInputToIso } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api';
@@ -95,6 +99,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
 
   const updateRaffle = useUpdateRaffle(id);
   const { data: mpStatus } = useMercadoPagoStatus();
+  const { data: feeConfig } = useFeeConfig();
   const deleteRaffle = useDeleteRaffle();
   const bulkSell = useBulkSell(id);
   const bulkRelease = useBulkRelease(id);
@@ -778,7 +783,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
 
           {/* ── Confirmation method ── */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
-            <SectionTitle>Método de confirmación</SectionTitle>
+            <SectionTitle>Método de cobro</SectionTitle>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {(
                 [
@@ -798,7 +803,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                     }
                     try {
                       await updateRaffle.mutateAsync({ confirmation_method: value } as never);
-                      toast.success('Método de confirmación actualizado');
+                      toast.success('Método de cobro actualizado');
                     } catch (err) {
                       toast.error(err instanceof ApiError ? err.message : 'Error al actualizar');
                     }
@@ -814,7 +819,34 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
                 </button>
               ))}
             </div>
-            <p className="text-xs text-zinc-500">Siempre editable, incluso con la rifa publicada.</p>
+            {raffle.confirmation_method === 'whatsapp' && (
+              <FieldRow label="Los números reservados quedan ocupados">
+                <select
+                  value={raffle.reservation_ttl_minutes}
+                  onChange={async (e) => {
+                    try {
+                      await updateRaffle.mutateAsync({ reservation_ttl_minutes: Number(e.target.value) } as never);
+                      toast.success('Tiempo de reserva actualizado');
+                    } catch (err) {
+                      toast.error(err instanceof ApiError ? err.message : 'Error al actualizar');
+                    }
+                  }}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                >
+                  {RESERVATION_TTL_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </FieldRow>
+            )}
+            <p className="text-xs text-zinc-500">Siempre editable, incluso con la rifa publicada. El cambio aplica a las reservas nuevas.</p>
+            <FeeBreakdownCard
+              price={raffle.price_per_number}
+              totalNumbers={raffle.total_numbers}
+              method={raffle.confirmation_method}
+              appFeePercent={raffle.app_fee_percent ?? 0}
+              mercadoPagoFeePercent={feeConfig?.mercadopago_fee_percent ?? 0}
+            />
           </div>
 
           {/* ── Promotions ── */}
@@ -1338,6 +1370,7 @@ export default function RaffleDetailPage({ params }: { params: Promise<{ id: str
         if (!finishMode) {
           return (
             <div className="space-y-3">
+              {raffle.status === 'active' && <FeePaymentCard raffleId={id} />}
               <p className="text-sm text-zinc-400">¿Cómo querés finalizar esta rifa?</p>
               <button
                 onClick={() => setFinishMode('manual')}

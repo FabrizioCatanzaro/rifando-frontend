@@ -1,4 +1,5 @@
 export type ConfirmationMethod = 'whatsapp' | 'upload' | 'mercadopago';
+export type ReservationTtlMinutes = 30 | 60 | 360 | 1440;
 
 export interface User {
   id: string;
@@ -37,6 +38,12 @@ export interface Raffle {
   rich_content: Record<string, unknown> | null;
   confirmation_method: ConfirmationMethod;
   draw_unlocked: boolean;
+  /** Comisión de Rifando (%) fijada al crear la rifa. Solo para el dueño. */
+  app_fee_percent?: number;
+  /** Meta de ganancia neta. Solo para el dueño. */
+  target_amount?: number | null;
+  /** Minutos que dura una reserva sin comprobante (sin Mercado Pago). */
+  reservation_ttl_minutes: ReservationTtlMinutes;
   created_at: string;
   updated_at: string;
   stats?: {
@@ -197,4 +204,67 @@ export interface MercadoPagoPayment {
   live_mode: boolean;
   date_approved: string | null;
   created_at: string;
+}
+
+/** Rifa activa y pública para la home (`GET /api/raffles/explore`). */
+export interface ExploreRaffle {
+  id: string;
+  slug: string;
+  title: string;
+  total_numbers: number;
+  price_per_number: number;
+  cover_icon: string;
+  draw_mode: 'all_sold' | 'fixed_date' | 'first_event';
+  draw_date: string | null;
+  confirmation_method: ConfirmationMethod;
+  created_at: string;
+  sold: number;
+  main_prize: { title: string; image_url: string | null } | null;
+  prize_count: number;
+  owner: { username: string; display_name: string | null; avatar_url: string | null };
+}
+
+export interface ExploreData {
+  raffles: ExploreRaffle[];
+  stats: { active_raffles: number; numbers_sold: number; organizers: number };
+}
+
+/** Porcentajes vigentes (`GET /api/fees`). */
+export interface FeeConfig {
+  app_fee_percent: number;
+  /** Estimado con IVA. Solo para la calculadora. */
+  mercadopago_fee_percent: number;
+}
+
+export interface FeePayment {
+  id: string;
+  raffle_id: string;
+  amount: number;
+  base_amount: number;
+  fee_percent: number;
+  comprobante_url: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+/** Comisión de Rifando por ventas sin Mercado Pago (`GET /api/raffles/:id/fee-payment`). */
+export interface FeePaymentInfo {
+  fee_percent: number;
+  revenue: number;
+  mercadopago_revenue: number;
+  manual_revenue: number;
+  due: number;
+  paid: number;
+  remaining: number;
+  pending_payment: FeePayment | null;
+  payments: FeePayment[];
+  account: { alias: string; holder: string | null; bank: string | null } | null;
+}
+
+export interface AdminFeePayment extends FeePayment {
+  raffle_title: string;
+  raffle_slug: string;
+  owner_username: string;
+  owner_email: string;
 }

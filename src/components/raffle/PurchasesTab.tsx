@@ -179,7 +179,7 @@ export function PurchasesTab({
         <p className="text-3xl mb-3">⏳</p>
         <p>No hay reservas pendientes.</p>
         <p className="text-xs mt-1">
-          Las reservas sin comprobante vencen a los 30 minutos. Las que tienen comprobante esperan tu decisión.
+          Las reservas sin comprobante vencen solas en el tiempo que elegiste en Configuración. Las que tienen comprobante esperan tu decisión.
         </p>
       </div>
     );

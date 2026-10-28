@@ -16,6 +16,7 @@ import { formatCurrency } from '@/lib/utils';
 import { buildWhatsAppUrl, calculatePrice } from '@/lib/whatsapp';
 import { api, ApiError } from '@/lib/api';
 import { createMercadoPagoCheckout } from '@/hooks/usePayments';
+import { formatTtl } from '@/lib/fees';
 import { savePendingCheckout } from '@/lib/mpCheckout';
 import type { ConfirmationMethod, Promotion, ReserveResult } from '@/types';
 
@@ -38,6 +39,8 @@ interface BuyerSheetProps {
   transferInfo: TransferInfo;
   sessionId: string;
   confirmationMethod: ConfirmationMethod;
+  /** Minutos que dura la reserva sin comprobante (sin Mercado Pago). */
+  reservationTtlMinutes?: number;
   onReserve: (params: {
     numbers: number[];
     session_id: string;
@@ -67,6 +70,7 @@ export function BuyerSheet({
   transferInfo,
   sessionId,
   confirmationMethod,
+  reservationTtlMinutes,
   onReserve,
 }: BuyerSheetProps) {
   const [name, setName] = useState('');
@@ -429,7 +433,7 @@ export function BuyerSheet({
                       ? 'Tus números quedan reservados 30 minutos mientras pagás. Se confirman solos al acreditarse el pago.'
                       : confirmationMethod === 'upload'
                         ? 'Tus números quedan reservados hasta que el organizador confirme tu pago.'
-                        : 'Tus números quedan reservados 30 minutos. En el paso siguiente enviás el mensaje por WhatsApp.'}
+                        : `Tus números quedan reservados ${formatTtl(reservationTtlMinutes ?? 30)}. En el paso siguiente enviás el mensaje por WhatsApp.`}
                   </p>
 
                   {isMercadoPago ? (

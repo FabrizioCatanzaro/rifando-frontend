@@ -9,6 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCreateRaffle } from '@/hooks/useRaffle';
+import { useFeeConfig } from '@/hooks/useFees';
+import { useMercadoPagoStatus } from '@/hooks/usePayments';
+import { PriceCalculator, type PriceMode } from '@/components/raffle/PriceCalculator';
+import { PaymentMethodPicker } from '@/components/raffle/PaymentMethodPicker';
+import type { ConfirmationMethod, ReservationTtlMinutes } from '@/types';
 import { ApiError, api } from '@/lib/api';
 import { isoToLocalInput, localInputToIso } from '@/lib/utils';
 import { Copy, Check, Plus, Trash2, ImagePlus, Info } from 'lucide-react';
@@ -60,6 +65,10 @@ interface FormData {
   cover_icon: string;
   draw_mode: 'all_sold' | 'fixed_date' | 'first_event';
   draw_date: string;
+  confirmation_method: ConfirmationMethod;
+  reservation_ttl_minutes: ReservationTtlMinutes;
+  price_mode: PriceMode;
+  target_amount: string;
   prizes: PrizeInput[];
   promotions: PromotionInput[];
 }
@@ -74,6 +83,10 @@ const schema = z.object({
   cover_icon: z.string().max(10),
   draw_mode: z.enum(['all_sold', 'fixed_date', 'first_event']),
   draw_date: z.string().optional(),
+  confirmation_method: z.enum(['whatsapp', 'upload', 'mercadopago']),
+  reservation_ttl_minutes: z.union([z.literal(30), z.literal(60), z.literal(360), z.literal(1440)]),
+  price_mode: z.enum(['target', 'manual']),
+  target_amount: z.string(),
   prizes: z
     .array(
       z.object({
@@ -97,6 +110,12 @@ const schema = z.object({
     )
     .optional(),
 }).superRefine((data, ctx) => {
+  if (data.price_mode === 'target' && !(Number(data.target_amount) > 0)) {
+    ctx.addIssue({ code: 'custom', path: ['target_amount'], message: 'Poné cuánto querés ganar' });
+  }
+  if (data.confirmation_method === 'mercadopago' && !(Number(data.price_per_number) > 0)) {
+    ctx.addIssue({ code: 'custom', path: ['price_per_number'], message: 'Con Mercado Pago el precio debe ser mayor a cero' });
+  }
   if (data.draw_mode === 'all_sold') return;
   if (!data.draw_date) {
     ctx.addIssue({ code: 'custom', path: ['draw_date'], message: 'Elegí la fecha límite del sorteo' });
@@ -130,6 +149,10 @@ export default function NewRafflePage() {
       draw_mode: 'all_sold',
       total_numbers: '100',
       price_per_number: '1000',
+      confirmation_method: 'whatsapp',
+      reservation_ttl_minutes: 30,
+      price_mode: 'target',
+      target_amount: '',
       access_code: '',
       prizes: [],
       promotions: [],
@@ -146,7 +169,21 @@ export default function NewRafflePage() {
     name: 'promotions',
   });
 
+  const { data: feeConfig } = useFeeConfig();
+  const { data: mpStatus } = useMercadoPagoStatus();
+  const mercadoPagoLinked = !!mpStatus?.linked;
+
   const visibility = watch('visibility');
+  const total_numbers = watch('total_numbers');
+  const price_per_number = watch('price_per_number');
+  const confirmation_method = watch('confirmation_method');
+  const reservation_ttl_minutes = watch('reservation_ttl_minutes');
+  const price_mode = watch('price_mode');
+  const target_amount = watch('target_amount');
+  const handlePriceChange = useCallback(
+    (v: string) => setValue('price_per_number', v, { shouldValidate: true }),
+    [setValue]
+  );
   const draw_mode = watch('draw_mode');
   const cover_icon = watch('cover_icon');
   const access_code = watch('access_code');
@@ -213,6 +250,9 @@ export default function NewRafflePage() {
         cover_icon: data.cover_icon,
         draw_mode: data.draw_mode,
         draw_date: needsDate && data.draw_date ? localInputToIso(data.draw_date) : undefined,
+        confirmation_method: data.confirmation_method,
+        reservation_ttl_minutes: data.reservation_ttl_minutes,
+        target_amount: data.price_mode === 'target' ? Number(data.target_amount) : null,
       } as never);
 
       const raffleId = res.raffle.id;
@@ -277,15 +317,38 @@ export default function NewRafflePage() {
               placeholder="Contá de qué se trata tu rifa..."
             />
           </Field>
+        </Section>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Cantidad de números *" error={(errors as Record<string, { message?: string }>).total_numbers?.message}>
-              <Input {...register('total_numbers')} type="number" min={11} max={10000} />
-            </Field>
-            <Field label="Precio por número *" error={(errors as Record<string, { message?: string }>).price_per_number?.message}>
-              <Input {...register('price_per_number')} type="number" min={0} placeholder="$" />
-            </Field>
-          </div>
+        {/* ── Cobro y precio ── */}
+        <Section title="Cobro y precio">
+          <Field label="Cantidad de números *" error={errors.total_numbers?.message}>
+            <Input {...register('total_numbers')} type="number" min={11} max={10000} className="sm:max-w-[50%]" />
+          </Field>
+
+          <Field label="¿Cómo cobrás?">
+            <PaymentMethodPicker
+              method={confirmation_method}
+              onMethodChange={(m) => setValue('confirmation_method', m, { shouldValidate: true })}
+              ttl={reservation_ttl_minutes}
+              onTtlChange={(t) => setValue('reservation_ttl_minutes', t)}
+              mercadoPagoLinked={mercadoPagoLinked}
+            />
+          </Field>
+
+          <PriceCalculator
+            totalNumbers={Number(total_numbers) || 0}
+            method={confirmation_method}
+            appFeePercent={feeConfig?.app_fee_percent ?? 0}
+            mercadoPagoFeePercent={feeConfig?.mercadopago_fee_percent ?? 0}
+            mode={price_mode}
+            onModeChange={(m) => setValue('price_mode', m)}
+            target={target_amount}
+            onTargetChange={(v) => setValue('target_amount', v, { shouldValidate: true })}
+            price={price_per_number}
+            onPriceChange={handlePriceChange}
+            priceError={errors.price_per_number?.message}
+            targetError={errors.target_amount?.message}
+          />
         </Section>
 
         {/* ── Configuración ── */}

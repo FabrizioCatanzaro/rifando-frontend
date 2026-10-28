@@ -508,6 +508,7 @@ export default function PublicRafflePage({
         }}
         sessionId={sessionId}
         confirmationMethod={raffle.confirmation_method ?? 'whatsapp'}
+        reservationTtlMinutes={raffle.reservation_ttl_minutes}
         onReserve={handleReserve}
       />
 
